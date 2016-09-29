@@ -10,7 +10,7 @@ QosSocket::QosSocket() : instanceId(instanceCounter++)
 	,packetsSent(0)
 	//,QosThread( std::thread(&QosSocket::Measure, this) )
 {
-	memset(buffer, 0xff, MAX_PAYLOADSIZE);
+	//memset(buffer, 0xff, MAX_PAYLOADSIZE);
 }
 
 void QosSocket::StartMeasuringQos()
@@ -22,8 +22,8 @@ void QosSocket::StartMeasuringQos()
 	socketInfo.overlapped.hEvent = WSACreateEvent();
 	WSAResetEvent(socketInfo.overlapped.hEvent);
 
-	QosPacket* packet = (QosPacket*)buffer;		//We could use a union instead here
-	packet->instanceId = instanceId;
+	//QosPacket* packet = (QosPacket*)buffer;		//We could use a union instead here
+	packet.instanceId = instanceId;
 
 	QosThread = std::thread(&QosSocket::Measure, this);
 }
@@ -47,13 +47,12 @@ void QosSocket::MeasureLoop()
 {
 	DWORD timeOut = 5000;
 	DWORD recvBytes = 0, flags = 0;
-	QosPacket* packet = (QosPacket*)buffer;		//We could use a union instead here
-	packet->packetId = packetsSent;
+	packet.packetId = packetsSent;
 
-	WSABUF wsaBuffer = { MAX_PAYLOADSIZE, &buffer[0] };
+	WSABUF wsaBuffer = { sizeof(packet), (char*)&packet };
 
 	QueryPerformanceCounter(&startTime);
-	//auto err = send(connectedSocket, buffer, MAX_PAYLOADSIZE , 0);
+
 	WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &socketInfo.overlapped, 0);
 	auto err = WSAGetLastError();
 	PrintError("Sending packet: ");
@@ -77,6 +76,10 @@ void QosSocket::MeasureLoop()
 		//PrintError("Receiving packet: ");
 		WSAResetEvent(socketInfo.overlapped.hEvent);
 	}
+	else
+	{
+		packetsLost++;
+	}
 	averagePing = accumulator.QuadPart * 1000 / frequency.QuadPart;
 }
 
@@ -91,3 +94,19 @@ void QosSocket::RecvCallback(DWORD dwError, DWORD cbTransferred, LPWSAOVERLAPPED
 		socketInfo->thisPtr->accumulator.QuadPart += socketInfo->thisPtr->endTime.QuadPart - socketInfo->thisPtr->startTime.QuadPart;
 	}
 }
+
+void QosSocket::PrintSocketOptions()
+{
+	DWORD receiveBuffer = 0;
+	DWORD sendBuffer = 0;
+	DWORD datatgramSize = 0;
+	int optionSize = sizeof(receiveBuffer);
+
+	getsockopt(connectedSocket, SOL_SOCKET, SO_RCVBUF, (char*)&receiveBuffer, &optionSize);
+	getsockopt(connectedSocket, SOL_SOCKET, SO_SNDBUF, (char*)&sendBuffer, &optionSize);
+	//getsockopt(connectedSocket, SOL_SOCKET, SO_MAXDG, (char*)&datatgramSize, &optionSize);
+
+	printf("Buffer size. Recieve: %i , Send: %i \n", receiveBuffer, sendBuffer);
+	//printf("maximum datagram size is %i \n", datatgramSize);
+}
+

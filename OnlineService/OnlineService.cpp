@@ -5,6 +5,8 @@
 #include "SimpleSocket.h"
 #include "QosSocket.h"
 
+const int MAX_PAYLOADSIZE = 256;
+
 char CharToHex(char character)
 {
 	character = tolower(character);
@@ -54,58 +56,9 @@ void StringToHex(const char* str, BYTE* hex)
 	}
 }
 
-int main()
+bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* clientSecret, char* authToken, uint32_t& tokenLength)
 {
-	WSADATA wsaData;
-	int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	//TODO: better error handling. Minimally output the type of error we got from err
-	if (err != 0)
-	{
-		printf("Error creating socket");
-		return -1;
-	}
-
-	if (true)
-	{
-		int port = 27015;
-		const uint32_t numConnections = 3;
-		QosSocket socketsArray[numConnections];
-		for (uint32_t i = 0; i < numConnections; i++)
-		{
-			QosSocket& socket = socketsArray[i];
-			socket.CreateConnection("127.0.0.1", std::to_string(port + i), false);
-			socket.SetNonBlockingMode();
-			socket.StartMeasuringQos();
-		}
-		getchar();
-		//Waitforthreads;
-		//for (auto socket : socketsArray)	//Required copy constructor for QosSocket
-		for( uint32_t i = 0; i < numConnections; i++)
-		{
-			socketsArray[i].StopMeasuring();
-		}
-
-		WSACleanup();
-		return 0;
-	}
-	
-	int authPort = 12704;
-	char* authUrl = "auth.rcr.experiments.fireteam.net";
-
-	SimpleSocket authSocket;
-	if ( !authSocket.CreateConnection(authUrl, std::to_string(authPort)) )
-	{
-		//Cleanup
-		printf("Error creating connection");
-		return -1;
-	}
-
-	//Convert string to binary data
-	char * clientID = "45f67935-9286-4ba0-8b3b-70228e727ca2";
-	char * clientSecret = "1eba4dac53c33ae135fe7b2a839eb30aec964f75";
-	
 	const int UUID_LENGTH_IN_BYTES = 16;
-	const int MAX_PAYLOADSIZE = 256;
 	
 	BYTE clientUUID[UUID_LENGTH_IN_BYTES];
 	constexpr int maxSecretLength = MAX_PAYLOADSIZE - UUID_LENGTH_IN_BYTES;
@@ -135,19 +88,76 @@ int main()
 	authSocket.Send(static_cast<uint16_t>(AuthMessageType::AuthTicketRequest), streamBuffer);
 
 	uint16_t messageType = 0;
-	uint32_t tokenLength = MAX_PAYLOADSIZE;
-	char authToken[MAX_PAYLOADSIZE];
 	if(!authSocket.Receive(messageType, authToken, tokenLength))
 	{
 		printf("Error response expected");
-		return -1;
+		return false;
 	}
 
 	if ((AuthMessageType) messageType != AuthMessageType::AuthTicketResponse)
 	{
 		printf("Error expected Auth Token");
+		return false;
+	}
+
+
+	return true;
+}
+
+int main()
+{
+	WSADATA wsaData;
+	int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	//TODO: better error handling. Minimally output the type of error we got from err
+	if (err != 0)
+	{
+		printf("Error creating socket");
 		return -1;
 	}
+
+	if (true)
+	{
+		int port = 27015;
+		const uint32_t numConnections = 3;
+		QosSocket socketsArray[numConnections];
+		for (uint32_t i = 0; i < numConnections; i++)
+		{
+			QosSocket& socket = socketsArray[i];
+			socket.CreateConnection("127.0.0.1", std::to_string(port + i), false);
+			socket.SetNonBlockingMode();
+			socket.PrintSocketOptions();
+			socket.StartMeasuringQos();
+		}
+		getchar();
+		//Waitforthreads;
+		//for (auto socket : socketsArray)	//Required copy constructor for QosSocket
+		for( uint32_t i = 0; i < numConnections; i++)
+		{
+			socketsArray[i].StopMeasuring();
+		}
+
+		WSACleanup();
+		return 0;
+	}
+	
+	int authPort = 12704;
+	char* authUrl = "auth.rcr.experiments.fireteam.net";
+
+	SimpleSocket authSocket;
+	if ( !authSocket.CreateConnection(authUrl, std::to_string(authPort)) )
+	{
+		//Cleanup
+		printf("Error creating connection");
+		return -1;
+	}
+
+	//Convert string to binary data
+	char * clientID = "45f67935-9286-4ba0-8b3b-70228e727ca2";
+	char * clientSecret = "1eba4dac53c33ae135fe7b2a839eb30aec964f75";
+	
+	uint32_t tokenLength = MAX_PAYLOADSIZE;
+	char authToken[MAX_PAYLOADSIZE];
+	GetAuthToken(authSocket, clientID, clientSecret, authToken, tokenLength);
 	
 	int apiPort = 12705;
 	char* apiUrl = "api.rcr.experiments.fireteam.net";
@@ -180,6 +190,7 @@ int main()
 		return -1;
 	}
 	
+	uint16_t messageType = 0;
 	uint32_t payloadSize = MAX_PAYLOADSIZE;
 	char payload[MAX_PAYLOADSIZE];
 	if (!apiSocket.Receive(messageType, payload, payloadSize))

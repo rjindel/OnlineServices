@@ -32,7 +32,7 @@ class QosSocket : public SimpleSocket
 	SocketInfo socketInfo;
 
 	static const int MAX_PAYLOADSIZE = 256;
-	char buffer[MAX_PAYLOADSIZE];
+	QosPacket packet;
 	
 	std::thread QosThread;
 	bool exit;
@@ -45,4 +45,6 @@ public:
 	void Measure();
 	void MeasureLoop();
 	static void CALLBACK RecvCallback(DWORD , DWORD, LPWSAOVERLAPPED, DWORD);
+
+	void PrintSocketOptions();
 };
