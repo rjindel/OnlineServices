@@ -104,6 +104,26 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 	return true;
 }
 
+void ClearScreen(HANDLE consoleHandle, uint32_t lines = 0)
+{
+	COORD coords{0, 0};
+	DWORD charsWritten, length;
+
+	CONSOLE_SCREEN_BUFFER_INFO consoleBufferInfo;
+	GetConsoleScreenBufferInfo(consoleHandle, &consoleBufferInfo);
+
+	if (lines == 0)
+	{
+		lines = consoleBufferInfo.dwSize.Y;
+	}
+	length = consoleBufferInfo.dwSize.X * lines;
+
+	FillConsoleOutputCharacter(consoleHandle, _TCHAR(' '), length, coords, &charsWritten);
+	//FillConsoleOutputAttribute
+
+	SetConsoleCursorPosition(consoleHandle, coords);
+}
+
 int main()
 {
 	WSADATA wsaData;
@@ -118,18 +138,35 @@ int main()
 	if (true)
 	{
 		int port = 27015;
+		std::string ipaddress = "127.0.0.1";
 		const uint32_t numConnections = 3;
 		QosSocket socketsArray[numConnections];
 		for (uint32_t i = 0; i < numConnections; i++)
 		{
 			QosSocket& socket = socketsArray[i];
-			socket.CreateConnection("127.0.0.1", std::to_string(port + i), false);
+			socket.CreateConnection(ipaddress, std::to_string(port + i), false);
 			socket.SetNonBlockingMode();
 			socket.PrintSocketOptions();
 			socket.StartMeasuringQos();
 		}
+
+		HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+		while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
+		{
+			ClearScreen(consoleHandle, numConnections + 4);
+			printf("Press Escape to exit\n");
+			printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
+			for (uint32_t i = 0; i < numConnections; i++)
+			{
+				uint32_t packetSent = socketsArray[i].GetPacketsSent();
+				uint32_t packetLost = socketsArray[i].GetPacketsLost();
+				uint32_t averagePing = socketsArray[i].GetAveragePing();
+				printf("%s:%i \t\t %i \t\t %i \t\t %i \n", ipaddress.c_str(), port + i, packetSent, packetLost, averagePing);
+			}
+			printf("\n\n");
+			Sleep(10);
+		}
 		getchar();
-		//Waitforthreads;
 		//for (auto socket : socketsArray)	//Required copy constructor for QosSocket
 		for( uint32_t i = 0; i < numConnections; i++)
 		{

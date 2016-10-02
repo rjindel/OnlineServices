@@ -59,7 +59,7 @@ void ListenFunction(const int threadId)
 			return;
 		}
 		printf("%i bytes Received from %s\n", bytesRead, inet_ntoa(incomingAddress.sin_addr));
-		Sleep(800);
+		Sleep(100);
 		int bytesSent = sendto(listenSocket, buffer, bytesRead, 0, (sockaddr*) &incomingAddress, incomingAddressLength);
 		if (bytesSent == SOCKET_ERROR)
 		{

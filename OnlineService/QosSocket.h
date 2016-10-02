@@ -16,13 +16,14 @@ struct QosPacket
 	uint32_t instanceId;
 	uint32_t packetId;
 	//Timestamp
+	LARGE_INTEGER startTime = { 0 };
 };
 
 class QosSocket : public SimpleSocket
 {
 	uint32_t	packetsSent;
-	uint32_t	packetsLost;
-	uint32_t	averagePing;
+
+	std::vector<uint32_t> packetIds;
 
 	LARGE_INTEGER startTime, endTime, frequency;
 	LARGE_INTEGER accumulator = { 0 };
@@ -33,8 +34,13 @@ class QosSocket : public SimpleSocket
 
 	static const int MAX_PAYLOADSIZE = 256;
 	QosPacket packet;
-	
+
 	std::thread QosThread;
+	std::thread QosReceiveThread;
+	std::thread QosSendThread;
+
+	std::recursive_mutex QosMutex;
+
 	bool exit;
 public:
 	QosSocket();
@@ -42,9 +48,15 @@ public:
 	void StartMeasuringQos();
 	void StopMeasuring();
 
+	void SendFunction();
+	void ReceiveFunction();
+
 	void Measure();
-	void MeasureLoop();
 	static void CALLBACK RecvCallback(DWORD , DWORD, LPWSAOVERLAPPED, DWORD);
+
+	uint32_t GetPacketsSent() { return packetsSent; }
+	uint32_t GetPacketsLost();
+	uint32_t GetAveragePing();
 
 	void PrintSocketOptions();
 };
