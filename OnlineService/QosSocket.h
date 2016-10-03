@@ -36,14 +36,15 @@ class QosSocket : public SimpleSocket
 	QosPacket packet;
 
 	std::thread QosThread;
-	std::thread QosReceiveThread;
-	std::thread QosSendThread;
+	//std::thread QosReceiveThread;
+	//std::thread QosSendThread;
 
 	std::recursive_mutex QosMutex;
 
 	bool exit;
 public:
 	QosSocket();
+	//QosSocket(QosSocket&&) = default;
 
 	void StartMeasuringQos();
 	void StopMeasuring();

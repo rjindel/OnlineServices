@@ -33,8 +33,8 @@ void QosSocket::StopMeasuring()
 	exit = true;
 	QosThread.join();
 	
-	QosSendThread.join();
-	QosReceiveThread.join();
+	//QosSendThread.join();
+	//QosReceiveThread.join();
 	WSACloseEvent(socketInfo.overlapped.hEvent);
 }
 

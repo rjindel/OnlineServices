@@ -51,6 +51,9 @@ bool SimpleSocket::CreateConnection(std::string url, std::string port, bool tcpi
 		printf("Connected to %s\n", resultPtr->ai_canonname);
 	}
 
+	ipAddress = url;
+	this->port = port;
+
 	return true;
 }
 

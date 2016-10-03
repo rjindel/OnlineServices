@@ -7,6 +7,8 @@ protected:
 	SOCKET connectedSocket;
 	struct addrinfo addr;
 
+	std::string ipAddress;
+	std::string port;
 
 	struct SimpleHeader
 	{
@@ -31,4 +33,14 @@ public:
 	void SetNonBlockingMode();
 
 	void PrintError(const char * msg);
+
+	std::string GetAddress()
+	{
+		return ipAddress;
+	}
+
+	std::string GetPort()
+	{
+		return port;
+	}
 };

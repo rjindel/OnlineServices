@@ -7,6 +7,25 @@
 
 const int MAX_PAYLOADSIZE = 256;
 
+//Message types for Authentication server
+enum class AuthMessageType : uint16_t
+{
+	Error = 0,
+	AuthTicketRequest = 1, 
+	AuthTicketResponse = 2
+};
+
+//Message types for Api Server 
+enum class APIMessageType : UINT16
+{
+	Error = 0,
+	Authorize = 1, 
+	GetServers = 2,
+	GetServerResponse = 3,
+};
+
+//Convert a single ascii character to a 4 bit hex value
+//If the character is outside outside the range [0-9a-fA-F] throw
 char CharToHex(char character)
 {
 	character = tolower(character);
@@ -28,6 +47,7 @@ char CharToHex(char character)
 	return temp;
 }
 
+//Convert a null terminated string to a byte array
 void StringToHex(const char* str, BYTE* hex)
 {
 	if (!str || !hex)
@@ -56,6 +76,10 @@ void StringToHex(const char* str, BYTE* hex)
 	}
 }
 
+//Get auth ticket from authentication server
+//authsocket is a socket that is already connect to the authentication server
+//clientID and clientSecret are null terminated string in hex form
+//The returned authToken is a byte array of tokenLength. This is still "message packed", however there is no need to unpack this as it is needs to be 'packed' before sending to the API Server
 bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* clientSecret, char* authToken, uint32_t& tokenLength)
 {
 	const int UUID_LENGTH_IN_BYTES = 16;
@@ -69,14 +93,6 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 	StringToHex(clientSecret, &clientSecretBinary[0]);
 	int secretLength = 0;
 	while (clientSecretBinary[secretLength] != 0) secretLength++;
-
-	// Create Header
-	enum class AuthMessageType : uint16_t
-	{
-		Error = 0,
-		AuthTicketRequest = 1, 
-		AuthTicketResponse = 2
-	};
 
 	//MsgPack client id and client secret
 	msgpack::sbuffer streamBuffer;
@@ -101,6 +117,51 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 	}
 
 
+	return true;
+}
+
+bool GetQosServerNames(SimpleSocket& apiSocket, QosSocket*& qosServers, uint32_t& qosServerCount)
+//bool GetQosServerNames(SimpleSocket& apiSocket, std::vector<QosSocket>& qosServers)
+{
+	if (!apiSocket.Send(static_cast<uint16_t>(APIMessageType::GetServers), nullptr, 0))
+	{
+		return false;
+	}
+	
+	uint16_t messageType = 0;
+	uint32_t payloadSize = MAX_PAYLOADSIZE;
+	char payload[MAX_PAYLOADSIZE];
+	if (!apiSocket.Receive(messageType, payload, payloadSize))
+	{
+		return false;
+	}
+
+	if ((APIMessageType)messageType != APIMessageType::GetServerResponse)
+	{
+		printf("expected server reponse");
+		return false;
+	}
+
+	msgpack::object_handle objectHandle = msgpack::unpack((const char*)&payload[0], payloadSize);
+	msgpack::object serverObjects = objectHandle.get();
+	
+	qosServerCount = serverObjects.via.array.size;
+	qosServers = new QosSocket[qosServerCount];
+
+	for(uint32_t i = 0; i < qosServerCount ; i++)
+	{
+		msgpack::type::tuple<std::string, int> serverData;
+		serverObjects.via.array.ptr[i].convert(serverData);
+
+		std::string servername = serverData.get<0>();
+		int port = serverData.get<1>();
+		printf("Address %s : %i \n", servername.c_str(), port);
+
+		qosServers[i].CreateConnection(servername, std::to_string(port), false);
+		qosServers[i].SetNonBlockingMode();
+		qosServers[i].StartMeasuringQos();
+	}
+	
 	return true;
 }
 
@@ -135,15 +196,16 @@ int main()
 		return -1;
 	}
 
-	if (true)
+	bool testLocalServer = true;
+	if ( testLocalServer )
 	{
 		int port = 27015;
 		std::string ipaddress = "127.0.0.1";
-		const uint32_t numConnections = 3;
-		QosSocket socketsArray[numConnections];
-		for (uint32_t i = 0; i < numConnections; i++)
+		const uint32_t qosServerCount = 3;
+		QosSocket qosServers[qosServerCount];
+		for (uint32_t i = 0; i < qosServerCount; i++)
 		{
-			QosSocket& socket = socketsArray[i];
+			QosSocket& socket = qosServers[i];
 			socket.CreateConnection(ipaddress, std::to_string(port + i), false);
 			socket.SetNonBlockingMode();
 			socket.PrintSocketOptions();
@@ -153,32 +215,35 @@ int main()
 		HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
 		while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
 		{
-			ClearScreen(consoleHandle, numConnections + 4);
+			ClearScreen(consoleHandle, qosServerCount + 4);
 			printf("Press Escape to exit\n");
 			printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
-			for (uint32_t i = 0; i < numConnections; i++)
+			for (uint32_t i = 0; i < qosServerCount; i++)
 			{
-				uint32_t packetSent = socketsArray[i].GetPacketsSent();
-				uint32_t packetLost = socketsArray[i].GetPacketsLost();
-				uint32_t averagePing = socketsArray[i].GetAveragePing();
-				printf("%s:%i \t\t %i \t\t %i \t\t %i \n", ipaddress.c_str(), port + i, packetSent, packetLost, averagePing);
+				uint32_t packetSent = qosServers[i].GetPacketsSent();
+				uint32_t packetLost = qosServers[i].GetPacketsLost();
+				uint32_t averagePing = qosServers[i].GetAveragePing();
+				printf("%s:%i \t\t %i \t\t %i \t\t %i \n",  qosServers[i].GetAddress().c_str(), std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
 			}
 			printf("\n\n");
 			Sleep(10);
 		}
-		getchar();
-		//for (auto socket : socketsArray)	//Required copy constructor for QosSocket
-		for( uint32_t i = 0; i < numConnections; i++)
+
+		//for (auto socket : qosServers)	//Required copy constructor for QosSocket
+		for( uint32_t i = 0; i < qosServerCount; i++)
 		{
-			socketsArray[i].StopMeasuring();
+			qosServers[i].StopMeasuring();
 		}
 
 		WSACleanup();
 		return 0;
 	}
 	
-	int authPort = 12704;
-	char* authUrl = "auth.rcr.experiments.fireteam.net";
+	//Connect to authentication server
+
+	//These hard coded value should idealy be read from file. 
+	const int authPort = 12704;
+	const char* authUrl = "auth.rcr.experiments.fireteam.net";
 
 	SimpleSocket authSocket;
 	if ( !authSocket.CreateConnection(authUrl, std::to_string(authPort)) )
@@ -188,16 +253,17 @@ int main()
 		return -1;
 	}
 
-	//Convert string to binary data
-	char * clientID = "45f67935-9286-4ba0-8b3b-70228e727ca2";
-	char * clientSecret = "1eba4dac53c33ae135fe7b2a839eb30aec964f75";
+	//Get Authentication token
+	const char * clientID = "45f67935-9286-4ba0-8b3b-70228e727ca2";
+	const char * clientSecret = "1eba4dac53c33ae135fe7b2a839eb30aec964f75";
 	
 	uint32_t tokenLength = MAX_PAYLOADSIZE;
 	char authToken[MAX_PAYLOADSIZE];
 	GetAuthToken(authSocket, clientID, clientSecret, authToken, tokenLength);
 	
-	int apiPort = 12705;
-	char* apiUrl = "api.rcr.experiments.fireteam.net";
+	//Connect to API server
+	const int apiPort = 12705;
+	const char* apiUrl = "api.rcr.experiments.fireteam.net";
 
 	SimpleSocket apiSocket;
 	if (!apiSocket.CreateConnection(apiUrl, std::to_string(apiPort)))
@@ -207,61 +273,50 @@ int main()
 		return -1;
 	}
 
-
-	// Create Header
-	enum class APIMessageType : UINT16
-	{
-		Error = 0,
-		Authorize = 1, 
-		GetServers = 2,
-		GetServerResponse = 3,
-	};
-
+	//Authorize
 	if (!apiSocket.Send(static_cast<uint16_t>(APIMessageType::Authorize), authToken, tokenLength))
 	{
 		return -1;
 	}
 
-	if (!apiSocket.Send(static_cast<uint16_t>(APIMessageType::GetServers), nullptr, 0))
-	{
-		return -1;
-	}
-	
-	uint16_t messageType = 0;
-	uint32_t payloadSize = MAX_PAYLOADSIZE;
-	char payload[MAX_PAYLOADSIZE];
-	if (!apiSocket.Receive(messageType, payload, payloadSize))
-	{
-		return -1;
-	}
+	//Get servers for Qos measurements
 
-	if ((APIMessageType)messageType != APIMessageType::GetServerResponse)
+	//Can not use std container, as copy constructor is deleted for thread\mutex class
+	//Defining move constructor and using move semantics doesn't help.
+	QosSocket *qosServers;
+	uint32_t qosServerCount;
+	GetQosServerNames(apiSocket, qosServers, qosServerCount);
+
+	//Start measuring
+	for (uint32_t i = 0; i < qosServerCount; i++)
 	{
-		printf("expected server reponse");
-		return -1;
+		qosServers[i].StartMeasuringQos();
 	}
 
-	msgpack::object_handle objectHandle = msgpack::unpack((const char*)&payload[0], payloadSize);
-	msgpack::object serverObjects = objectHandle.get();
-	
-	std::vector<QosSocket> qosServers(serverObjects.via.array.size);
-
-	for(uint32_t i = 0; i < serverObjects.via.array.size; i++)
+	//Output measurements to screen
+	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
 	{
-
-		msgpack::type::tuple<std::string, int> serverData;
-		serverObjects.via.array.ptr[i].convert(serverData);
-
-		std::string servername = serverData.get<0>();
-		int port = serverData.get<1>();
-		printf("Address %s : %i \n", servername.c_str(), port);
-
-		QosSocket qosSocket;
-		qosSocket.CreateConnection(servername, std::to_string(port), false);
-		qosSocket.SetNonBlockingMode();
-		qosSocket.StartMeasuringQos();
+		ClearScreen(consoleHandle, qosServerCount + 4);
+		printf("Press Escape to exit\n");
+		printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
+		for (uint32_t i = 0; i < qosServerCount; i++)
+		{
+			uint32_t packetSent = qosServers[i].GetPacketsSent();
+			uint32_t packetLost = qosServers[i].GetPacketsLost();
+			uint32_t averagePing = qosServers[i].GetAveragePing();
+			printf("%s:%i \t\t %i \t\t %i \t\t %i \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
+		}
+		printf("\n\n");
+		Sleep(10);
 	}
-	
+
+	//Cleanup
+	for( uint32_t i = 0; i < qosServerCount; i++)
+	{
+		qosServers[i].StopMeasuring();
+	}
+
 	WSACleanup();
     return 0;
 }
