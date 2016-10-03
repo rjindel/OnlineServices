@@ -6,14 +6,29 @@ uint32_t QosSocket::instanceCounter = 0;
 
 QosSocket::QosSocket() : instanceId(instanceCounter++) 
 	, exit(false)
-	,packetsSent(0)
-	//,QosThread( std::thread(&QosSocket::Measure, this) )
+	, packetsSent(0)
 {
+}
+
+QosSocket::~QosSocket()
+{
+	if (QosThread.joinable())
+	{
+		printf("Destructor called while still measuring. Call StopMeasuring before destroying QosSocket. Blocking to wait for thread to complete.\n");
+		StopMeasuring();
+	}
 }
 
 void QosSocket::StartMeasuringQos()
 {
+	if (QosThread.joinable())
+	{
+		printf("Measuring already in progress. Call StopMeasuring first.\n");
+		return;
+	}
+	
 	QueryPerformanceFrequency(&frequency);
+	exit = false;
 
 	socketInfo.thisPtr = this;
 	memset(&socketInfo.overlapped, 0, sizeof(WSAOVERLAPPED));
@@ -83,7 +98,7 @@ void QosSocket::ReceiveFunction()
 void QosSocket::Measure()
 {
 	LARGE_INTEGER endTime = { 0 };
-	DWORD timeOut = 500;
+	DWORD timeOut = 1000;
 	DWORD recvBytes = 0, flags = 0;
 	packetIds.clear();
 
@@ -115,7 +130,7 @@ void QosSocket::Measure()
 				WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &socketInfo.overlapped, nullptr);
 				err = WSAGetLastError();
 			} while (err == WSA_IO_PENDING);
-			PrintError("Receiving packet: ");
+			//PrintError("Receiving packet: ");
 
 			result = WSAWaitForMultipleEvents(1, &socketInfo.overlapped.hEvent, FALSE, timeOut, true);
 			QueryPerformanceCounter(&endTime);
@@ -144,18 +159,6 @@ void QosSocket::Measure()
 				}
 			}
 		}
-	}
-}
-
-void QosSocket::RecvCallback(DWORD dwError, DWORD cbTransferred, LPWSAOVERLAPPED overlapped, DWORD flags)
-{
-	auto err = WSAGetLastError();
-	if (dwError == WSA_WAIT_IO_COMPLETION || dwError == 0)
-	{
-		SocketInfo *socketInfo = (SocketInfo*)overlapped;
-		QueryPerformanceCounter(&socketInfo->thisPtr->endTime);
-
-		socketInfo->thisPtr->accumulator.QuadPart += socketInfo->thisPtr->endTime.QuadPart - socketInfo->thisPtr->startTime.QuadPart;
 	}
 }
 

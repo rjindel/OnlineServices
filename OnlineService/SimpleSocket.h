@@ -10,19 +10,21 @@ protected:
 	std::string ipAddress;
 	std::string port;
 
+#pragma pack(push, 1)
 	struct SimpleHeader
 	{
 		uint32_t payloadSize;
 		uint16_t msgType;
 	};
-	
+#pragma pack(pop)
+
 public:
 	SimpleSocket() : connectedSocket(INVALID_SOCKET) 
 	{
 		memset(&addr, 0, sizeof(addr));
 		addr.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
 	};
-	~SimpleSocket();
+	virtual ~SimpleSocket();
 
 	bool CreateConnection(std::string url, std::string port, bool tcpip = true);
 

@@ -12,7 +12,7 @@ struct SocketInfo
 
 struct QosPacket
 {
-	char header[2] = { (char)0xff };
+	char header[2] = { (char)0xff, (char)0xff };
 	uint32_t instanceId;
 	uint32_t packetId;
 	//Timestamp
@@ -44,7 +44,7 @@ class QosSocket : public SimpleSocket
 	bool exit;
 public:
 	QosSocket();
-	//QosSocket(QosSocket&&) = default;
+	virtual ~QosSocket();
 
 	void StartMeasuringQos();
 	void StopMeasuring();
@@ -53,7 +53,6 @@ public:
 	void ReceiveFunction();
 
 	void Measure();
-	static void CALLBACK RecvCallback(DWORD , DWORD, LPWSAOVERLAPPED, DWORD);
 
 	uint32_t GetPacketsSent() { return packetsSent; }
 	uint32_t GetPacketsLost();

@@ -116,13 +116,23 @@ bool SimpleSocket::Receive(uint16_t& msgType, char* buffer, uint32_t& bufferSize
 	}
 	
 	bufferSize = recv(connectedSocket, buffer, bufferSize, 0);
-	if (err == SOCKET_ERROR)
+	if (bufferSize == SOCKET_ERROR)
 	{
 		PrintError("Error receiving data: ");
+		return false;
 	}
 	
 	if (bufferSize < 0)
 	{
+		printf("Error: no data received\n");
+		return false;
+	}
+
+	if (msgType == 0)
+	{
+		msgpack::object_handle objectHandle = msgpack::unpack(buffer, bufferSize);
+		msgpack::object object = objectHandle.get();
+		std::cout << object << std::endl;
 		return false;
 	}
 
@@ -140,9 +150,12 @@ void SimpleSocket::SetNonBlockingMode()
 
 void SimpleSocket::PrintError(const char * msg)
 {
+	auto err = WSAGetLastError();
+	if (err != 0)
+	{
 		const int MAX_STRING_SIZE = 256;
 		char buffer[MAX_STRING_SIZE];
-		auto err = WSAGetLastError();
 		FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, buffer, MAX_STRING_SIZE, nullptr);
 		printf("%s: %s", msg, buffer);
+	}
 }

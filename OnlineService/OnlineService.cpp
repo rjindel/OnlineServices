@@ -97,8 +97,9 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 	//MsgPack client id and client secret
 	msgpack::sbuffer streamBuffer;
 	msgpack::packer<msgpack::sbuffer> packer(&streamBuffer);
-	packer.pack_bin(UUID_LENGTH_IN_BYTES + secretLength);
+	packer.pack_bin(UUID_LENGTH_IN_BYTES);
 	packer.pack_bin_body((const char *)clientUUID, UUID_LENGTH_IN_BYTES);
+	packer.pack_bin(secretLength);
 	packer.pack_bin_body((const char *)clientSecretBinary, secretLength);
 
 	authSocket.Send(static_cast<uint16_t>(AuthMessageType::AuthTicketRequest), streamBuffer);
@@ -121,7 +122,6 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 }
 
 bool GetQosServerNames(SimpleSocket& apiSocket, QosSocket*& qosServers, uint32_t& qosServerCount)
-//bool GetQosServerNames(SimpleSocket& apiSocket, std::vector<QosSocket>& qosServers)
 {
 	if (!apiSocket.Send(static_cast<uint16_t>(APIMessageType::GetServers), nullptr, 0))
 	{
@@ -129,8 +129,8 @@ bool GetQosServerNames(SimpleSocket& apiSocket, QosSocket*& qosServers, uint32_t
 	}
 	
 	uint16_t messageType = 0;
-	uint32_t payloadSize = MAX_PAYLOADSIZE;
-	char payload[MAX_PAYLOADSIZE];
+	uint32_t payloadSize = 1024;		//TODO remove magic number
+	char payload[1024];
 	if (!apiSocket.Receive(messageType, payload, payloadSize))
 	{
 		return false;
@@ -155,11 +155,10 @@ bool GetQosServerNames(SimpleSocket& apiSocket, QosSocket*& qosServers, uint32_t
 
 		std::string servername = serverData.get<0>();
 		int port = serverData.get<1>();
-		printf("Address %s : %i \n", servername.c_str(), port);
+		//printf("Address %s : %i \n", servername.c_str(), port);
 
 		qosServers[i].CreateConnection(servername, std::to_string(port), false);
 		qosServers[i].SetNonBlockingMode();
-		qosServers[i].StartMeasuringQos();
 	}
 	
 	return true;
@@ -180,23 +179,42 @@ void ClearScreen(HANDLE consoleHandle, uint32_t lines = 0)
 	length = consoleBufferInfo.dwSize.X * lines;
 
 	FillConsoleOutputCharacter(consoleHandle, _TCHAR(' '), length, coords, &charsWritten);
-	//FillConsoleOutputAttribute
 
 	SetConsoleCursorPosition(consoleHandle, coords);
+}
+
+void PrintQosData(QosSocket *qosServers, uint32_t qosServerCount)
+{
+	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
+	{
+		ClearScreen(consoleHandle, qosServerCount + 4);
+		printf("Press Escape to exit\n");
+		printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
+		for (uint32_t i = 0; i < qosServerCount; i++)
+		{
+			uint32_t packetSent = qosServers[i].GetPacketsSent();
+			uint32_t packetLost = qosServers[i].GetPacketsLost();
+			uint32_t averagePing = qosServers[i].GetAveragePing();
+			printf("%s:%i \t\t %i \t\t %i \t\t %i \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
+		}
+		printf("\n\n");
+		Sleep(10);
+	}
 }
 
 int main()
 {
 	WSADATA wsaData;
 	int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	//TODO: better error handling. Minimally output the type of error we got from err
+
 	if (err != 0)
 	{
 		printf("Error creating socket");
 		return -1;
 	}
 
-	bool testLocalServer = true;
+	bool testLocalServer = false;
 	if ( testLocalServer )
 	{
 		int port = 27015;
@@ -205,29 +223,12 @@ int main()
 		QosSocket qosServers[qosServerCount];
 		for (uint32_t i = 0; i < qosServerCount; i++)
 		{
-			QosSocket& socket = qosServers[i];
-			socket.CreateConnection(ipaddress, std::to_string(port + i), false);
-			socket.SetNonBlockingMode();
-			socket.PrintSocketOptions();
-			socket.StartMeasuringQos();
+			qosServers[i].CreateConnection(ipaddress, std::to_string(port + i), false);
+			qosServers[i].SetNonBlockingMode();
+			qosServers[i].StartMeasuringQos();
 		}
 
-		HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-		while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
-		{
-			ClearScreen(consoleHandle, qosServerCount + 4);
-			printf("Press Escape to exit\n");
-			printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
-			for (uint32_t i = 0; i < qosServerCount; i++)
-			{
-				uint32_t packetSent = qosServers[i].GetPacketsSent();
-				uint32_t packetLost = qosServers[i].GetPacketsLost();
-				uint32_t averagePing = qosServers[i].GetAveragePing();
-				printf("%s:%i \t\t %i \t\t %i \t\t %i \n",  qosServers[i].GetAddress().c_str(), std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
-			}
-			printf("\n\n");
-			Sleep(10);
-		}
+		PrintQosData(qosServers, qosServerCount);
 
 		//for (auto socket : qosServers)	//Required copy constructor for QosSocket
 		for( uint32_t i = 0; i < qosServerCount; i++)
@@ -294,22 +295,7 @@ int main()
 	}
 
 	//Output measurements to screen
-	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-	while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
-	{
-		ClearScreen(consoleHandle, qosServerCount + 4);
-		printf("Press Escape to exit\n");
-		printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
-		for (uint32_t i = 0; i < qosServerCount; i++)
-		{
-			uint32_t packetSent = qosServers[i].GetPacketsSent();
-			uint32_t packetLost = qosServers[i].GetPacketsLost();
-			uint32_t averagePing = qosServers[i].GetAveragePing();
-			printf("%s:%i \t\t %i \t\t %i \t\t %i \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
-		}
-		printf("\n\n");
-		Sleep(10);
-	}
+	PrintQosData(qosServers, qosServerCount);
 
 	//Cleanup
 	for( uint32_t i = 0; i < qosServerCount; i++)
