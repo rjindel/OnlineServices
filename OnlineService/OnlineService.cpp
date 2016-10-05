@@ -22,31 +22,6 @@ int main()
 		return -1;
 	}
 
-	bool testLocalServer = false;
-	if ( testLocalServer )
-	{
-		int port = 27015;
-		std::string ipaddress = "127.0.0.1";
-		const uint32_t qosServerCount = 3;
-		QosConnection qosServers[qosServerCount];
-		for (uint32_t i = 0; i < qosServerCount; i++)
-		{
-			qosServers[i].CreateConnection(ipaddress, std::to_string(port + i), false);
-			qosServers[i].SetNonBlockingMode();
-			qosServers[i].StartMeasuringQos();
-		}
-
-		QosConnection::PrintQosData(qosServers, qosServerCount);
-
-		for( uint32_t i = 0; i < qosServerCount; i++)
-		{
-			qosServers[i].StopMeasuring();
-		}
-
-		WSACleanup();
-		return 0;
-	}
-	
 	//Connect to authentication server
 
 	//These hard coded value should idealy be read from file. 
