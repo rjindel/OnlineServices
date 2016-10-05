@@ -31,10 +31,9 @@ void QosConnection::StartMeasuringQos()
 	QueryPerformanceFrequency(&frequency);
 	exit = false;
 
-	socketInfo.thisPtr = this;
-	memset(&socketInfo.overlapped, 0, sizeof(WSAOVERLAPPED));
-	socketInfo.overlapped.hEvent = WSACreateEvent();
-	WSAResetEvent(socketInfo.overlapped.hEvent);
+	memset(&overlapped, 0, sizeof(WSAOVERLAPPED));
+	overlapped.hEvent = WSACreateEvent();
+	WSAResetEvent(overlapped.hEvent);
 
 	packet.instanceId = instanceId;
 
@@ -46,13 +45,12 @@ void QosConnection::StopMeasuring()
 	exit = true;
 	QosThread.join();
 	
-	WSACloseEvent(socketInfo.overlapped.hEvent);
+	WSACloseEvent(overlapped.hEvent);
 }
 
 void QosConnection::Measure()
 {
 	LARGE_INTEGER endTime = { 0 };
-	DWORD timeOut = 1000;
 	DWORD recvBytes = 0, flags = 0;
 	packetIds.clear();
 
@@ -61,7 +59,7 @@ void QosConnection::Measure()
 
 	while (!exit)
 	{
-		WSAResetEvent(socketInfo.overlapped.hEvent);
+		WSAResetEvent(overlapped.hEvent);
 
 		{
 			std::lock_guard<>(QosMutex);
@@ -70,23 +68,23 @@ void QosConnection::Measure()
 		}
 		QueryPerformanceCounter(&packet.startTime);
 
-		WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &socketInfo.overlapped, 0);
+		WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &overlapped, 0);
 		auto err = WSAGetLastError();
 		PrintError("Sending packet: ");
 
-		DWORD result = WSAWaitForMultipleEvents(1, &socketInfo.overlapped.hEvent, FALSE, timeOut, false);
+		DWORD result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, false);
 
-		WSAResetEvent(socketInfo.overlapped.hEvent);
+		WSAResetEvent(overlapped.hEvent);
 
 		if (result != WSA_WAIT_TIMEOUT)
 		{
 			do {
-				WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &socketInfo.overlapped, nullptr);
+				WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &overlapped, nullptr);
 				err = WSAGetLastError();
 			} while (err == WSA_IO_PENDING);
 			//PrintError("Receiving packet: ");
 
-			result = WSAWaitForMultipleEvents(1, &socketInfo.overlapped.hEvent, FALSE, timeOut, true);
+			result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, true);
 			QueryPerformanceCounter(&endTime);
 
 			if (result == 0)
@@ -150,7 +148,14 @@ void QosConnection::PrintQosData(QosConnection *qosServers, uint32_t qosServerCo
 			uint32_t packetSent = qosServers[i].GetPacketsSent();
 			uint32_t packetLost = qosServers[i].GetPacketsLost();
 			uint32_t averagePing = qosServers[i].GetAveragePing();
-			printf("%s:%i \t\t %i \t\t %i \t\t %i \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
+			if( averagePing > 0)
+			{
+				printf("%s:%i \t\t %i \t\t %i \t\t %i \n", qosServers[i].GetAddress().c_str(), std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
+			}
+			else
+			{
+				printf("%s:%i \t\t %i \t\t %i \t\t - \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost);
+			}
 		}
 		printf("\n\n");
 		Sleep(refreshTime);

@@ -15,7 +15,7 @@ AuthenticationConnection::~AuthenticationConnection()
 //authsocket is a socket that is already connect to the authentication server
 //clientID and clientSecret are null terminated string in hex form
 //The returned authToken is a byte array of tokenLength. This is still "message packed", however there is no need to unpack this as it is needs to be 'packed' before sending to the API Server
-bool AuthenticationConnection::GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char> authToken)
+bool AuthenticationConnection::GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char>& authToken)
 {
 	const int MAX_PAYLOADSIZE = 256;
 	const int UUID_LENGTH_IN_BYTES = 16;

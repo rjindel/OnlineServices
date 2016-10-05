@@ -4,12 +4,6 @@
 
 class QosConnection;
 
-struct SocketInfo
-{
-	WSAOVERLAPPED overlapped;
-	QosConnection* thisPtr;
-};
-
 struct QosPacket
 {
 	char header[2] = { (char)0xff, (char)0xff };
@@ -25,21 +19,22 @@ class QosConnection : public SimpleConnection
 
 	std::vector<uint32_t> packetIds;
 
-	LARGE_INTEGER startTime, endTime, frequency;
+	LARGE_INTEGER frequency;
 	LARGE_INTEGER accumulator = { 0 };
+
 	static uint32_t instanceCounter;
 	uint32_t instanceId;
 
-	SocketInfo socketInfo;
+	WSAOVERLAPPED overlapped;
 
+	DWORD timeOut = 5000;
 	static const int MAX_PAYLOADSIZE = 256;
 	QosPacket packet;
 
 	std::thread QosThread;
-
 	std::recursive_mutex QosMutex;
-
 	bool exit;
+
 public:
 	QosConnection();
 	virtual ~QosConnection();
