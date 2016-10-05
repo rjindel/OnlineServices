@@ -1,7 +1,7 @@
 #pragma once
 #include "stdafx.h"
 
-class SimpleSocket
+class SimpleConnection
 {
 protected:
 	SOCKET connectedSocket;
@@ -19,18 +19,19 @@ protected:
 #pragma pack(pop)
 
 public:
-	SimpleSocket() : connectedSocket(INVALID_SOCKET) 
+	SimpleConnection() : connectedSocket(INVALID_SOCKET) 
 	{
 		memset(&addr, 0, sizeof(addr));
 		addr.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
 	};
-	virtual ~SimpleSocket();
+	virtual ~SimpleConnection();
 
 	bool CreateConnection(std::string url, std::string port, bool tcpip = true);
 
+	bool Send(uint16_t msgType);
 	bool Send(uint16_t msgType, msgpack::sbuffer& buffer);
-	bool Send(uint16_t msgType, char* buffer, uint32_t size);
-	bool Receive(uint16_t& msgType, char* buffer, uint32_t& bufferSize);
+	bool Send(uint16_t msgType, const std::vector<char> buffer);
+	bool Receive(uint16_t& msgType, std::vector<char>& buffer);
 
 	void SetNonBlockingMode();
 

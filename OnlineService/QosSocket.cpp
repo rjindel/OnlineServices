@@ -1,16 +1,17 @@
 #include "stdafx.h"
 
-#include "QosSocket.h"
+#include "QosConnection.h"
+#include "Utils.h"
 
-uint32_t QosSocket::instanceCounter = 0;
+uint32_t QosConnection::instanceCounter = 0;
 
-QosSocket::QosSocket() : instanceId(instanceCounter++) 
+QosConnection::QosConnection() : instanceId(instanceCounter++) 
 	, exit(false)
 	, packetsSent(0)
 {
 }
 
-QosSocket::~QosSocket()
+QosConnection::~QosConnection()
 {
 	if (QosThread.joinable())
 	{
@@ -19,7 +20,7 @@ QosSocket::~QosSocket()
 	}
 }
 
-void QosSocket::StartMeasuringQos()
+void QosConnection::StartMeasuringQos()
 {
 	if (QosThread.joinable())
 	{
@@ -37,65 +38,18 @@ void QosSocket::StartMeasuringQos()
 
 	packet.instanceId = instanceId;
 
-	QosThread = std::thread(&QosSocket::Measure, this);
-
-	//QosReceiveThread = std::thread(&QosSocket::ReceiveFunction, this);
-	//QosSendThread = std::thread(&QosSocket::SendFunction, this);
+	QosThread = std::thread(&QosConnection::Measure, this);
 }
 
-void QosSocket::StopMeasuring()
+void QosConnection::StopMeasuring()
 {
 	exit = true;
 	QosThread.join();
 	
-	//QosSendThread.join();
-	//QosReceiveThread.join();
 	WSACloseEvent(socketInfo.overlapped.hEvent);
 }
 
-void QosSocket::SendFunction()
-{
-	DWORD timeOut = 5000;
-	packet.packetId = packetsSent;
-
-	WSABUF wsaBuffer = { sizeof(packet), (char*)&packet };
-
-	WSAResetEvent(socketInfo.overlapped.hEvent);
-	QueryPerformanceCounter(&packet.startTime);
-
-	WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &socketInfo.overlapped, 0);
-	auto err = WSAGetLastError();
-	PrintError("Sending packet: ");
-	packetsSent++;
-
-	DWORD result = WSAWaitForMultipleEvents(1, &socketInfo.overlapped.hEvent, FALSE, timeOut, false);
-	//WSAGetOverlappedResult(connectedSocket, &socketInfo.overlapped, &recvBytes, true, &flags);
-}
-
-void QosSocket::ReceiveFunction()
-{
-	DWORD timeOut = 5000;
-	DWORD recvBytes = 0, flags = 0;
-
-	QosPacket packet;
-	WSABUF wsaBuffer = { sizeof(packet), (char*)&packet };
-	WSAResetEvent(socketInfo.overlapped.hEvent);
-	int err = 0;
-
-	do {
-		WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &socketInfo.overlapped, nullptr);
-		auto err = WSAGetLastError();
-	} while (err == WSA_IO_PENDING);
-	PrintError("Receiving packet: ");
-
-	auto result = WSAWaitForMultipleEvents(1, &socketInfo.overlapped.hEvent, FALSE, timeOut, true);
-	//PrintError("Receiving packet: ");
-	QueryPerformanceCounter(&endTime);
-
-	accumulator.QuadPart += endTime.QuadPart - startTime.QuadPart;
-}
-
-void QosSocket::Measure()
+void QosConnection::Measure()
 {
 	LARGE_INTEGER endTime = { 0 };
 	DWORD timeOut = 1000;
@@ -121,7 +75,7 @@ void QosSocket::Measure()
 		PrintError("Sending packet: ");
 
 		DWORD result = WSAWaitForMultipleEvents(1, &socketInfo.overlapped.hEvent, FALSE, timeOut, false);
-		//WSAGetOverlappedResult(connectedSocket, &socketInfo.overlapped, &recvBytes, true, &flags);
+
 		WSAResetEvent(socketInfo.overlapped.hEvent);
 
 		if (result != WSA_WAIT_TIMEOUT)
@@ -162,14 +116,14 @@ void QosSocket::Measure()
 	}
 }
 
-uint32_t QosSocket::GetPacketsLost() 
+uint32_t QosConnection::GetPacketsLost() 
 { 
 	std::lock_guard<>(QosMutex);
 	uint32_t packetsLost = packetIds.size();
 	return packetsLost;
 }
 
-uint32_t QosSocket::GetAveragePing() 
+uint32_t QosConnection::GetAveragePing() 
 {
 	std::lock_guard<>(QosMutex);
 	uint32_t succesfullySentPackets = packetsSent - GetPacketsLost();
@@ -181,18 +135,24 @@ uint32_t QosSocket::GetAveragePing()
 	return 0;
 }
 
-void QosSocket::PrintSocketOptions()
+void QosConnection::PrintQosData(QosConnection *qosServers, uint32_t qosServerCount)
 {
-	DWORD receiveBuffer = 0;
-	DWORD sendBuffer = 0;
-	DWORD datatgramSize = 0;
-	int optionSize = sizeof(receiveBuffer);
-
-	getsockopt(connectedSocket, SOL_SOCKET, SO_RCVBUF, (char*)&receiveBuffer, &optionSize);
-	getsockopt(connectedSocket, SOL_SOCKET, SO_SNDBUF, (char*)&sendBuffer, &optionSize);
-	//getsockopt(connectedSocket, SOL_SOCKET, SO_MAXDG, (char*)&datatgramSize, &optionSize);
-
-	printf("Buffer size. Recieve: %i , Send: %i \n", receiveBuffer, sendBuffer);
-	//printf("maximum datagram size is %i \n", datatgramSize);
+	const int commentLines = 2;
+	const int refreshTime = 10;
+	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
+	{
+		ClearScreen(consoleHandle, qosServerCount + commentLines);
+		printf("Press Escape to exit\n");
+		printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
+		for (uint32_t i = 0; i < qosServerCount; i++)
+		{
+			uint32_t packetSent = qosServers[i].GetPacketsSent();
+			uint32_t packetLost = qosServers[i].GetPacketsLost();
+			uint32_t averagePing = qosServers[i].GetAveragePing();
+			printf("%s:%i \t\t %i \t\t %i \t\t %i \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
+		}
+		printf("\n\n");
+		Sleep(refreshTime);
+	}
 }
-

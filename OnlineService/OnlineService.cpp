@@ -2,10 +2,9 @@
 //
 #include "stdafx.h"
 
-#include "SimpleSocket.h"
-#include "QosSocket.h"
-
-const int MAX_PAYLOADSIZE = 256;
+#include "SimpleConnection.h"
+#include "QosConnection.h"
+#include "Utils.h"
 
 //Message types for Authentication server
 enum class AuthMessageType : uint16_t
@@ -24,64 +23,13 @@ enum class APIMessageType : UINT16
 	GetServerResponse = 3,
 };
 
-//Convert a single ascii character to a 4 bit hex value
-//If the character is outside outside the range [0-9a-fA-F] throw
-char CharToHex(char character)
-{
-	character = tolower(character);
-	if (!isalnum(character))
-	{
-		throw "invalid string";
-	}
-
-	char temp = 0;
-	if (isdigit(character))
-	{
-		temp = character - '0';
-	}
-	else
-	{
-		temp = character - 'a' + 10;
-	}
-
-	return temp;
-}
-
-//Convert a null terminated string to a byte array
-void StringToHex(const char* str, BYTE* hex)
-{
-	if (!str || !hex)
-	{
-		throw "invalid parameters";
-	}
-
-	while (*str != 0 && *str + 1 != 0)// && *hex != 0)
-	{
-		if (*str == '-')
-		{
-			//Handle uuid's. Ideally this belongs in a higher level function, but as we have simple use case, it's easier to handle here.
-			//As the message headers are little-endian, we don't need to endian conversion
-			str++;
-			continue;
-		}
-
-		char hiNibble = CharToHex(*str);
-		str++;
-
-		char loNibble = CharToHex(*str);
-
-		*hex = (hiNibble << 4) + loNibble;
-		hex++;
-		str++;
-	}
-}
-
 //Get auth ticket from authentication server
 //authsocket is a socket that is already connect to the authentication server
 //clientID and clientSecret are null terminated string in hex form
 //The returned authToken is a byte array of tokenLength. This is still "message packed", however there is no need to unpack this as it is needs to be 'packed' before sending to the API Server
-bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* clientSecret, char* authToken, uint32_t& tokenLength)
+bool GetAuthToken(SimpleConnection& authConnection, const char* clientID, const char* clientSecret, std::vector<char> authToken)
 {
+	const int MAX_PAYLOADSIZE = 256;
 	const int UUID_LENGTH_IN_BYTES = 16;
 	
 	BYTE clientUUID[UUID_LENGTH_IN_BYTES];
@@ -92,7 +40,13 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 	StringToHex(clientID, &clientUUID[0]);
 	StringToHex(clientSecret, &clientSecretBinary[0]);
 	int secretLength = 0;
-	while (clientSecretBinary[secretLength] != 0) secretLength++;
+	while (secretLength < maxSecretLength && clientSecretBinary[secretLength] != 0 ) secretLength++;
+
+	if (secretLength == maxSecretLength)
+	{
+		printf("Client secret exceed max payload length");
+		return false;
+	}
 
 	//MsgPack client id and client secret
 	msgpack::sbuffer streamBuffer;
@@ -102,10 +56,14 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 	packer.pack_bin(secretLength);
 	packer.pack_bin_body((const char *)clientSecretBinary, secretLength);
 
-	authSocket.Send(static_cast<uint16_t>(AuthMessageType::AuthTicketRequest), streamBuffer);
+	if (!authConnection.Send(static_cast<uint16_t>(AuthMessageType::AuthTicketRequest), streamBuffer))
+	{
+		printf("Error sending Authentication token");
+		return false;
+	}
 
 	uint16_t messageType = 0;
-	if(!authSocket.Receive(messageType, authToken, tokenLength))
+	if(!authConnection.Receive(messageType, authToken))
 	{
 		printf("Error response expected");
 		return false;
@@ -117,21 +75,19 @@ bool GetAuthToken(SimpleSocket& authSocket, const char* clientID, const char* cl
 		return false;
 	}
 
-
 	return true;
 }
 
-bool GetQosServerNames(SimpleSocket& apiSocket, QosSocket*& qosServers, uint32_t& qosServerCount)
+bool GetQosServerNames(SimpleConnection& apiConnection, QosConnection*& qosServers, uint32_t& qosServerCount)
 {
-	if (!apiSocket.Send(static_cast<uint16_t>(APIMessageType::GetServers), nullptr, 0))
+	if (!apiConnection.Send(static_cast<uint16_t>(APIMessageType::GetServers)))
 	{
 		return false;
 	}
 	
 	uint16_t messageType = 0;
-	uint32_t payloadSize = 1024;		//TODO remove magic number
-	char payload[1024];
-	if (!apiSocket.Receive(messageType, payload, payloadSize))
+	std::vector<char> payload;
+	if (!apiConnection.Receive(messageType, payload))
 	{
 		return false;
 	}
@@ -142,11 +98,11 @@ bool GetQosServerNames(SimpleSocket& apiSocket, QosSocket*& qosServers, uint32_t
 		return false;
 	}
 
-	msgpack::object_handle objectHandle = msgpack::unpack((const char*)&payload[0], payloadSize);
+	msgpack::object_handle objectHandle = msgpack::unpack((const char*)payload.data(), payload.size());
 	msgpack::object serverObjects = objectHandle.get();
 	
 	qosServerCount = serverObjects.via.array.size;
-	qosServers = new QosSocket[qosServerCount];
+	qosServers = new QosConnection[qosServerCount];
 
 	for(uint32_t i = 0; i < qosServerCount ; i++)
 	{
@@ -155,52 +111,15 @@ bool GetQosServerNames(SimpleSocket& apiSocket, QosSocket*& qosServers, uint32_t
 
 		std::string servername = serverData.get<0>();
 		int port = serverData.get<1>();
-		//printf("Address %s : %i \n", servername.c_str(), port);
 
-		qosServers[i].CreateConnection(servername, std::to_string(port), false);
+		if (!qosServers[i].CreateConnection(servername, std::to_string(port), false))
+		{
+			return false;
+		}
 		qosServers[i].SetNonBlockingMode();
 	}
 	
 	return true;
-}
-
-void ClearScreen(HANDLE consoleHandle, uint32_t lines = 0)
-{
-	COORD coords{0, 0};
-	DWORD charsWritten, length;
-
-	CONSOLE_SCREEN_BUFFER_INFO consoleBufferInfo;
-	GetConsoleScreenBufferInfo(consoleHandle, &consoleBufferInfo);
-
-	if (lines == 0)
-	{
-		lines = consoleBufferInfo.dwSize.Y;
-	}
-	length = consoleBufferInfo.dwSize.X * lines;
-
-	FillConsoleOutputCharacter(consoleHandle, _TCHAR(' '), length, coords, &charsWritten);
-
-	SetConsoleCursorPosition(consoleHandle, coords);
-}
-
-void PrintQosData(QosSocket *qosServers, uint32_t qosServerCount)
-{
-	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-	while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
-	{
-		ClearScreen(consoleHandle, qosServerCount + 4);
-		printf("Press Escape to exit\n");
-		printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
-		for (uint32_t i = 0; i < qosServerCount; i++)
-		{
-			uint32_t packetSent = qosServers[i].GetPacketsSent();
-			uint32_t packetLost = qosServers[i].GetPacketsLost();
-			uint32_t averagePing = qosServers[i].GetAveragePing();
-			printf("%s:%i \t\t %i \t\t %i \t\t %i \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost, averagePing);
-		}
-		printf("\n\n");
-		Sleep(10);
-	}
 }
 
 int main()
@@ -220,7 +139,7 @@ int main()
 		int port = 27015;
 		std::string ipaddress = "127.0.0.1";
 		const uint32_t qosServerCount = 3;
-		QosSocket qosServers[qosServerCount];
+		QosConnection qosServers[qosServerCount];
 		for (uint32_t i = 0; i < qosServerCount; i++)
 		{
 			qosServers[i].CreateConnection(ipaddress, std::to_string(port + i), false);
@@ -228,9 +147,8 @@ int main()
 			qosServers[i].StartMeasuringQos();
 		}
 
-		PrintQosData(qosServers, qosServerCount);
+		QosConnection::PrintQosData(qosServers, qosServerCount);
 
-		//for (auto socket : qosServers)	//Required copy constructor for QosSocket
 		for( uint32_t i = 0; i < qosServerCount; i++)
 		{
 			qosServers[i].StopMeasuring();
@@ -246,8 +164,8 @@ int main()
 	const int authPort = 12704;
 	const char* authUrl = "auth.rcr.experiments.fireteam.net";
 
-	SimpleSocket authSocket;
-	if ( !authSocket.CreateConnection(authUrl, std::to_string(authPort)) )
+	SimpleConnection authConnection;
+	if ( !authConnection.CreateConnection(authUrl, std::to_string(authPort)) )
 	{
 		//Cleanup
 		printf("Error creating connection");
@@ -258,16 +176,18 @@ int main()
 	const char * clientID = "45f67935-9286-4ba0-8b3b-70228e727ca2";
 	const char * clientSecret = "1eba4dac53c33ae135fe7b2a839eb30aec964f75";
 	
-	uint32_t tokenLength = MAX_PAYLOADSIZE;
-	char authToken[MAX_PAYLOADSIZE];
-	GetAuthToken(authSocket, clientID, clientSecret, authToken, tokenLength);
+	std::vector<char> authToken;
+	if (!GetAuthToken(authConnection, clientID, clientSecret, authToken))
+	{
+		return -1;
+	}
 	
 	//Connect to API server
 	const int apiPort = 12705;
 	const char* apiUrl = "api.rcr.experiments.fireteam.net";
 
-	SimpleSocket apiSocket;
-	if (!apiSocket.CreateConnection(apiUrl, std::to_string(apiPort)))
+	SimpleConnection apiConnection;
+	if (!apiConnection.CreateConnection(apiUrl, std::to_string(apiPort)))
 	{
 		//Cleanup
 		printf("Error creating connection");
@@ -275,7 +195,7 @@ int main()
 	}
 
 	//Authorize
-	if (!apiSocket.Send(static_cast<uint16_t>(APIMessageType::Authorize), authToken, tokenLength))
+	if (!apiConnection.Send(static_cast<uint16_t>(APIMessageType::Authorize), authToken))
 	{
 		return -1;
 	}
@@ -284,9 +204,12 @@ int main()
 
 	//Can not use std container, as copy constructor is deleted for thread\mutex class
 	//Defining move constructor and using move semantics doesn't help.
-	QosSocket *qosServers;
+	QosConnection *qosServers;
 	uint32_t qosServerCount;
-	GetQosServerNames(apiSocket, qosServers, qosServerCount);
+	if (!GetQosServerNames(apiConnection, qosServers, qosServerCount))
+	{
+		return -1;
+	}
 
 	//Start measuring
 	for (uint32_t i = 0; i < qosServerCount; i++)
@@ -295,13 +218,15 @@ int main()
 	}
 
 	//Output measurements to screen
-	PrintQosData(qosServers, qosServerCount);
+	QosConnection::PrintQosData(qosServers, qosServerCount);
 
 	//Cleanup
 	for( uint32_t i = 0; i < qosServerCount; i++)
 	{
 		qosServers[i].StopMeasuring();
 	}
+
+	delete[] qosServers;
 
 	WSACleanup();
     return 0;

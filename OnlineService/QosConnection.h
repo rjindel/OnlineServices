@@ -1,13 +1,13 @@
 #pragma once
 #include "stdafx.h"
-#include "SimpleSocket.h"
+#include "SimpleConnection.h"
 
-class QosSocket;
+class QosConnection;
 
 struct SocketInfo
 {
 	WSAOVERLAPPED overlapped;
-	QosSocket* thisPtr;
+	QosConnection* thisPtr;
 };
 
 struct QosPacket
@@ -19,7 +19,7 @@ struct QosPacket
 	LARGE_INTEGER startTime = { 0 };
 };
 
-class QosSocket : public SimpleSocket
+class QosConnection : public SimpleConnection
 {
 	uint32_t	packetsSent;
 
@@ -36,21 +36,16 @@ class QosSocket : public SimpleSocket
 	QosPacket packet;
 
 	std::thread QosThread;
-	//std::thread QosReceiveThread;
-	//std::thread QosSendThread;
 
 	std::recursive_mutex QosMutex;
 
 	bool exit;
 public:
-	QosSocket();
-	virtual ~QosSocket();
+	QosConnection();
+	virtual ~QosConnection();
 
 	void StartMeasuringQos();
 	void StopMeasuring();
-
-	void SendFunction();
-	void ReceiveFunction();
 
 	void Measure();
 
@@ -58,5 +53,5 @@ public:
 	uint32_t GetPacketsLost();
 	uint32_t GetAveragePing();
 
-	void PrintSocketOptions();
+	static void PrintQosData(QosConnection *qosServers, uint32_t qosServerCount);
 };

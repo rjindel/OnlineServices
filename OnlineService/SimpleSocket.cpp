@@ -1,13 +1,13 @@
 #include "stdafx.h"
-#include "SimpleSocket.h"
+#include "SimpleConnection.h"
 
-SimpleSocket::~SimpleSocket()
+SimpleConnection::~SimpleConnection()
 {
 	closesocket(connectedSocket);
 }
 
 // Pass the port as string, so that getddrinfo can handle the conversion to network byte ordering
-bool SimpleSocket::CreateConnection(std::string url, std::string port, bool tcpip)
+bool SimpleConnection::CreateConnection(std::string url, std::string port, bool tcpip)
 {
 	if (tcpip)
 	{
@@ -39,17 +39,13 @@ bool SimpleSocket::CreateConnection(std::string url, std::string port, bool tcpi
 		return false;
 	}
 	
-	//if (tcpip)
+	err = connect(connectedSocket, resultPtr->ai_addr, resultPtr->ai_addrlen);
+	if (err != 0)
 	{
-		err = connect(connectedSocket, resultPtr->ai_addr, resultPtr->ai_addrlen);
-
-		if (err != 0)
-		{
-			PrintError("Error connecting");
-			return false;
-		}
-		printf("Connected to %s\n", resultPtr->ai_canonname);
+		PrintError("Error connecting");
+		return false;
 	}
+	printf("Connected to %s\n", resultPtr->ai_canonname);
 
 	ipAddress = url;
 	this->port = port;
@@ -57,65 +53,80 @@ bool SimpleSocket::CreateConnection(std::string url, std::string port, bool tcpi
 	return true;
 }
 
-bool SimpleSocket::Send(uint16_t msgType, msgpack::sbuffer& buffer)
+bool SimpleConnection::Send(uint16_t msgType, msgpack::sbuffer& buffer)
 {
 	SimpleHeader authHeader;
 	authHeader.msgType = msgType;
 	authHeader.payloadSize = buffer.size();
 
-	//ERRor Check
 	auto err = send(connectedSocket, (char*)&authHeader, sizeof(SimpleHeader), 0);
 	if (err == SOCKET_ERROR)
 	{
 		PrintError("Error sending header: ");
+		return false;
 	}	
+
 	err = send(connectedSocket, buffer.data(), buffer.size(), 0);
 	if (err == SOCKET_ERROR)
 	{
 		PrintError("Error sending data: ");
+		return false;
 	}
 
 	return true;
 }
 
-bool SimpleSocket::Send(uint16_t msgType, char* buffer, uint32_t size)
+bool SimpleConnection::Send(uint16_t msgType)
 {
 	SimpleHeader authHeader;
 	authHeader.msgType = msgType;
-	authHeader.payloadSize = size;
+	authHeader.payloadSize = 0;
 
-	//ERRor Check
 	auto err = send(connectedSocket, (char*)&authHeader, sizeof(SimpleHeader), 0);
 	if (err == SOCKET_ERROR)
 	{
 		PrintError("Error sending header: ");
 	}
 
-	err = send(connectedSocket, buffer, size, 0);
+	return true;
+}
+
+bool SimpleConnection::Send(uint16_t msgType, const std::vector<char> buffer)
+{
+	SimpleHeader authHeader;
+	authHeader.msgType = msgType;
+	authHeader.payloadSize = buffer.size();
+
+	auto err = send(connectedSocket, (char*)&authHeader, sizeof(SimpleHeader), 0);
+	if (err == SOCKET_ERROR)
+	{
+		PrintError("Error sending header: ");
+	}
+
+	err = send(connectedSocket, buffer.data(), buffer.size(), 0);
 	if (err == SOCKET_ERROR)
 	{
 		PrintError("Error sending data: ");
+		return false;
 	}
 
-	return true;;
+	return true;
 }
 
-bool SimpleSocket::Receive(uint16_t& msgType, char* buffer, uint32_t& bufferSize)
+bool SimpleConnection::Receive(uint16_t& msgType, std::vector<char>& buffer)
 {
 	SimpleHeader header;
 	auto err = recv(connectedSocket, (char*)&header, sizeof(header), 0);
 	if (err == SOCKET_ERROR)
 	{
 		PrintError("Error receiving header: ");
+		return false;
 	}
 	msgType = header.msgType;
 
-	if (header.payloadSize > bufferSize)
-	{
-		return false;
-	}
-	
-	bufferSize = recv(connectedSocket, buffer, bufferSize, 0);
+	uint32_t bufferSize = header.payloadSize;
+	buffer.resize(bufferSize);
+	bufferSize = recv(connectedSocket, buffer.data(), bufferSize, 0);
 	if (bufferSize == SOCKET_ERROR)
 	{
 		PrintError("Error receiving data: ");
@@ -130,7 +141,7 @@ bool SimpleSocket::Receive(uint16_t& msgType, char* buffer, uint32_t& bufferSize
 
 	if (msgType == 0)
 	{
-		msgpack::object_handle objectHandle = msgpack::unpack(buffer, bufferSize);
+		msgpack::object_handle objectHandle = msgpack::unpack(buffer.data(), buffer.size());
 		msgpack::object object = objectHandle.get();
 		std::cout << object << std::endl;
 		return false;
@@ -139,7 +150,7 @@ bool SimpleSocket::Receive(uint16_t& msgType, char* buffer, uint32_t& bufferSize
 	return true;
 }
 
-void SimpleSocket::SetNonBlockingMode()
+void SimpleConnection::SetNonBlockingMode()
 {
 	u_long mode = 1;
 	if (ioctlsocket(connectedSocket, FIONBIO, &mode))
@@ -148,7 +159,7 @@ void SimpleSocket::SetNonBlockingMode()
 	}
 }
 
-void SimpleSocket::PrintError(const char * msg)
+void SimpleConnection::PrintError(const char * msg)
 {
 	auto err = WSAGetLastError();
 	if (err != 0)
