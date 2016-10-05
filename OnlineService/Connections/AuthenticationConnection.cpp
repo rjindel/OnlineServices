@@ -1,6 +1,6 @@
-#include "stdafx.h"
+#include "..\stdafx.h"
 #include "AuthenticationConnection.h"
-#include "Utils.h"
+#include "..\Utils.h"
 
 AuthenticationConnection::AuthenticationConnection()
 {

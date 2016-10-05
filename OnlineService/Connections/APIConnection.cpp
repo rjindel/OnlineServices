@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "..\stdafx.h"
 #include "APIConnection.h"
 
 bool APIConnection::GetQosServerNames(QosConnection*& qosServers, uint32_t& qosServerCount)

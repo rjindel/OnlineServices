@@ -1,7 +1,7 @@
-#include "stdafx.h"
+#include "..\stdafx.h"
 
 #include "QosConnection.h"
-#include "Utils.h"
+#include "..\Utils.h"
 
 uint32_t QosConnection::instanceCounter = 0;
 

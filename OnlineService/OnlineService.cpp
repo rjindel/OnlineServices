@@ -93,6 +93,7 @@ int main()
 
 	//Can not use std container, as copy constructor is deleted for thread\mutex class
 	//Defining move constructor and using move semantics doesn't help.
+	//using a smart pointer makes things more complicated
 	QosConnection *qosServers;
 	uint32_t qosServerCount;
 	if (!apiConnection.GetQosServerNames(qosServers, qosServerCount))
