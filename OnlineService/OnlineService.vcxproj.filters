@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Connections">
+      <UniqueIdentifier>{189fa386-b25b-406d-8262-25de66c972bd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -27,11 +30,17 @@
     <ClInclude Include="Utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SimpleConnection.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Connections\SimpleConnection.h">
+      <Filter>Connections</Filter>
     </ClInclude>
-    <ClInclude Include="QosConnection.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Connections\QosConnection.h">
+      <Filter>Connections</Filter>
+    </ClInclude>
+    <ClInclude Include="Connections\APIConnection.h">
+      <Filter>Connections</Filter>
+    </ClInclude>
+    <ClInclude Include="Connections\AuthenticationConnection.h">
+      <Filter>Connections</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -41,14 +50,20 @@
     <ClCompile Include="OnlineService.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SimpleSocket.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="QosSocket.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Utils.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Connections\SimpleConnection.cpp">
+      <Filter>Connections</Filter>
+    </ClCompile>
+    <ClCompile Include="Connections\QosConnection.cpp">
+      <Filter>Connections</Filter>
+    </ClCompile>
+    <ClCompile Include="Connections\APIConnection.cpp">
+      <Filter>Connections</Filter>
+    </ClCompile>
+    <ClCompile Include="Connections\AuthenticationConnection.cpp">
+      <Filter>Connections</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

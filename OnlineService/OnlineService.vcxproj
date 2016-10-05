@@ -153,16 +153,20 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="QosConnection.h" />
-    <ClInclude Include="SimpleConnection.h" />
+    <ClInclude Include="Connections\APIConnection.h" />
+    <ClInclude Include="Connections\AuthenticationConnection.h" />
+    <ClInclude Include="Connections\QosConnection.h" />
+    <ClInclude Include="Connections\SimpleConnection.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Connections\APIConnection.cpp" />
+    <ClCompile Include="Connections\AuthenticationConnection.cpp" />
+    <ClCompile Include="Connections\QosConnection.cpp" />
+    <ClCompile Include="Connections\SimpleConnection.cpp" />
     <ClCompile Include="OnlineService.cpp" />
-    <ClCompile Include="QosSocket.cpp" />
-    <ClCompile Include="SimpleSocket.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
