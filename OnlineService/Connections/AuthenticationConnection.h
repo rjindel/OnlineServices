@@ -1,3 +1,11 @@
+//-------------------------------------------------------------------------
+//
+// File: AuthentcationConnection.h
+//
+// Wrap call to Authentication servers to get authentication token
+//
+//--------------------------------------------------------------------------
+
 #pragma once
 #include "SimpleConnection.h"
 
@@ -13,6 +21,6 @@ class AuthenticationConnection : public SimpleConnection
 {
 public:
 	//Get auth ticket from authentication server
-	bool GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char>& authToken);
+	bool GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char>& authToken) const;
 };
 

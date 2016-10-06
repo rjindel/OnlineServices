@@ -1,3 +1,10 @@
+//-------------------------------------------------------------------------
+//
+// File: QosConnection.h
+//
+// Connection class to handle qos
+//
+//--------------------------------------------------------------------------
 #pragma once
 #include "..\stdafx.h"
 #include "SimpleConnection.h"
@@ -25,7 +32,7 @@ class QosConnection : public SimpleConnection
 	std::recursive_mutex	QosMutex;
 	bool					exit;
 
-	WSAOVERLAPPED			overlapped;
+	WSAOVERLAPPED			overlapped = { 0 };
 	LARGE_INTEGER			frequency = { 0 };
 	LARGE_INTEGER			accumulator = { 0 };
 
@@ -41,14 +48,14 @@ public:
 	QosConnection();
 	virtual ~QosConnection();
 
-	void StartMeasuringQos();
-	void StopMeasuring();
+	void		StartMeasuringQos();
+	void		StopMeasuring();
 
-	void Measure();
+	void		Measure();
 
-	uint32_t GetPacketsSent() { return packetsSent; }
-	uint32_t GetPacketsLost();
-	uint32_t GetAveragePing();
+	uint32_t	GetPacketsSent() const { return packetsSent; }
+	uint32_t	GetPacketsLost();
+	uint32_t	GetAveragePing();
 
 	static void PrintQosData(QosConnection *qosServers, uint32_t qosServerCount);
 };

@@ -1,3 +1,11 @@
+//-------------------------------------------------------------------------
+//
+// File: APIConnection.h
+//
+// Wrap call to API server to get QosServers
+//
+//--------------------------------------------------------------------------
+
 #pragma once
 #include "SimpleConnection.h"
 #include "QosConnection.h"
@@ -14,6 +22,6 @@ enum class APIMessageType : UINT16
 class APIConnection : public SimpleConnection
 {
 public:
-	bool GetQosServerNames(QosConnection*& qosServers, uint32_t& qosServerCount);
+	bool GetQosServer(QosConnection*& qosServers, uint32_t& qosServerCount) const;
 };
 

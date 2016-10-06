@@ -1,3 +1,11 @@
+//-------------------------------------------------------------------------
+//
+// File: QosConnection.cpp
+//
+// Connection class to handle qos
+//
+//--------------------------------------------------------------------------
+
 #include "..\stdafx.h"
 
 #include "QosConnection.h"
@@ -10,6 +18,7 @@ QosConnection::QosConnection() : instanceId(instanceCounter++)
 	, packetsSent(0)
 	, timeOut(5000)
 {
+	QueryPerformanceFrequency(&frequency);
 }
 
 QosConnection::~QosConnection()
@@ -29,7 +38,6 @@ void QosConnection::StartMeasuringQos()
 		return;
 	}
 	
-	QueryPerformanceFrequency(&frequency);
 	exit = false;
 
 	memset(&overlapped, 0, sizeof(WSAOVERLAPPED));
@@ -69,8 +77,8 @@ void QosConnection::Measure()
 		}
 		QueryPerformanceCounter(&packet.startTime);
 
-		int err = WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &overlapped, 0);
-		if (err != 0 || err != WSA_IO_PENDING)
+		int IOResult = WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &overlapped, nullptr);
+		if (IOResult != 0 || IOResult != WSA_IO_PENDING)
 		{
 			PrintError("Sending packet: ");
 		}
@@ -82,8 +90,8 @@ void QosConnection::Measure()
 		if (result != WSA_WAIT_TIMEOUT)
 		{
 			do {
-				err = WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &overlapped, nullptr);
-			} while (err == WSA_IO_PENDING);
+				IOResult = WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &overlapped, nullptr);
+			} while (IOResult == WSA_IO_PENDING);
 
 			result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, TRUE);
 			QueryPerformanceCounter(&endTime);
@@ -145,7 +153,7 @@ void QosConnection::PrintQosData(QosConnection *qosServers, uint32_t qosServerCo
 
 	while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
 	{
-		ClearScreen(consoleHandle, qosServerCount + commentLines);
+		Utils::ClearScreen(consoleHandle, qosServerCount + commentLines);
 		printf("Press Escape to exit\n");
 		printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
 

@@ -1,3 +1,11 @@
+//-------------------------------------------------------------------------
+//
+// File: SimpleConnection.cpp
+//
+// Connection class wraps socket calls and manages the lifetime of the socket
+//
+//--------------------------------------------------------------------------
+
 #include "..\stdafx.h"
 #include "SimpleConnection.h"
 
@@ -9,11 +17,14 @@ SimpleConnection::SimpleConnection() : connectedSocket(INVALID_SOCKET)
 
 SimpleConnection::~SimpleConnection()
 {
-	closesocket(connectedSocket);
+	if (connectedSocket != INVALID_SOCKET)
+	{
+		closesocket(connectedSocket);
+	}
 }
 
 // Pass the port as string, so that getddrinfo can handle the conversion to network byte ordering
-bool SimpleConnection::CreateConnection(const std::string& url, const std::string& port, bool tcpip)
+bool SimpleConnection::CreateConnection(const std::string& url, const std::string& connectionPort, bool tcpip)
 {
 	if (tcpip)
 	{
@@ -29,7 +40,7 @@ bool SimpleConnection::CreateConnection(const std::string& url, const std::strin
 	addr.ai_flags = AI_CANONNAME;
 
 	struct addrinfo *resultPtr;
-	auto err = getaddrinfo(url.c_str(), port.c_str(), &addr, &resultPtr);
+	auto err = getaddrinfo(url.c_str(), connectionPort.c_str(), &addr, &resultPtr);
 	std::shared_ptr<addrinfo> resultWrapper(resultPtr, freeaddrinfo);
 	if (err != 0)
 	{
@@ -53,17 +64,16 @@ bool SimpleConnection::CreateConnection(const std::string& url, const std::strin
 	printf("Connected to %s\n", resultPtr->ai_canonname);
 
 	ipAddress = url;
-	this->port = port;
+	port = connectionPort;
 
 	return true;
 }
 
 //Send a packet of msgType with no payload
-bool SimpleConnection::Send(uint16_t msgType)
+bool SimpleConnection::Send(uint16_t msgType) const
 {
-	SimpleHeader authHeader;
+	SimpleHeader authHeader = { 0 };
 	authHeader.msgType = msgType;
-	authHeader.payloadSize = 0;
 
 	auto err = send(connectedSocket, (char*)&authHeader, sizeof(SimpleHeader), 0);
 	if (err == SOCKET_ERROR)
@@ -74,9 +84,9 @@ bool SimpleConnection::Send(uint16_t msgType)
 	return true;
 }
 
-bool SimpleConnection::Send(uint16_t msgType, const msgpack::sbuffer& buffer)
+bool SimpleConnection::Send(uint16_t msgType, const msgpack::sbuffer& buffer) const
 {
-	SimpleHeader authHeader;
+	SimpleHeader authHeader = { 0 };
 	authHeader.msgType = msgType;
 	authHeader.payloadSize = buffer.size();
 
@@ -97,9 +107,9 @@ bool SimpleConnection::Send(uint16_t msgType, const msgpack::sbuffer& buffer)
 	return true;
 }
 
-bool SimpleConnection::Send(uint16_t msgType, const std::vector<char>& buffer)
+bool SimpleConnection::Send(uint16_t msgType, const std::vector<char>& buffer) const
 {
-	SimpleHeader authHeader;
+	SimpleHeader authHeader = { 0 };
 	authHeader.msgType = msgType;
 	authHeader.payloadSize = buffer.size();
 
@@ -119,9 +129,9 @@ bool SimpleConnection::Send(uint16_t msgType, const std::vector<char>& buffer)
 	return true;
 }
 
-bool SimpleConnection::Receive(uint16_t& msgType, std::vector<char>& buffer)
+bool SimpleConnection::Receive(uint16_t& msgType, std::vector<char>& buffer) const
 {
-	SimpleHeader header;
+	SimpleHeader header = { 0 };
 	auto err = recv(connectedSocket, (char*)&header, sizeof(header), 0);
 	if (err == SOCKET_ERROR)
 	{
@@ -156,7 +166,7 @@ bool SimpleConnection::Receive(uint16_t& msgType, std::vector<char>& buffer)
 	return true;
 }
 
-bool SimpleConnection::SetNonBlockingMode()
+bool SimpleConnection::SetNonBlockingMode() const
 {
 	u_long mode = 1;
 	if (ioctlsocket(connectedSocket, FIONBIO, &mode))
@@ -168,7 +178,7 @@ bool SimpleConnection::SetNonBlockingMode()
 	return true;
 }
 
-void SimpleConnection::PrintError(const char * msg)
+void SimpleConnection::PrintError(const char * msg) const
 {
 	auto err = WSAGetLastError();
 	if (err != 0)

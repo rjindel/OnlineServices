@@ -1,3 +1,11 @@
+//-------------------------------------------------------------------------
+//
+// File: AuthenticationConnection.cpp
+//
+// Wrap call to Authentication servers to get authentication token
+//
+//--------------------------------------------------------------------------
+
 #include "..\stdafx.h"
 #include "AuthenticationConnection.h"
 #include "..\Utils.h"
@@ -6,18 +14,17 @@
 //authsocket is a socket that is already connect to the authentication server
 //clientID and clientSecret are null terminated string in hex form
 //The returned authToken is a byte array of tokenLength. This is still "message packed", however there is no need to unpack this as it is needs to be 'packed' before sending to the API Server
-bool AuthenticationConnection::GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char>& authToken)
+bool AuthenticationConnection::GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char>& authToken) const
 {
 	const int MAX_PAYLOADSIZE = 256;
 	const int UUID_LENGTH_IN_BYTES = 16;
-	BYTE clientUUID[UUID_LENGTH_IN_BYTES];
+	BYTE clientUUID[UUID_LENGTH_IN_BYTES] = { 0 };
 
 	constexpr int maxSecretLength = MAX_PAYLOADSIZE - UUID_LENGTH_IN_BYTES;
-	BYTE clientSecretBinary[maxSecretLength];
-	memset(clientSecretBinary, 0, maxSecretLength);
+	BYTE clientSecretBinary[maxSecretLength] = { 0 };
 
-	StringToHex(clientID, &clientUUID[0]);
-	StringToHex(clientSecret, &clientSecretBinary[0]);
+	Utils::StringToHex(clientID, &clientUUID[0]);
+	Utils::StringToHex(clientSecret, &clientSecretBinary[0]);
 
 	int secretLength = 0;
 	while (secretLength < maxSecretLength && clientSecretBinary[secretLength] != 0 ) secretLength++;

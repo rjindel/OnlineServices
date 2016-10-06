@@ -11,7 +11,7 @@
 
 int main()
 {
-	WSADATA wsaData;
+	WSADATA wsaData = { 0 };
 	int err =	WSAStartup(MAKEWORD(2, 2), &wsaData);
 
 	if (err != 0)
@@ -66,9 +66,9 @@ int main()
 	//Can not use std container, as copy constructor is deleted for thread\mutex class
 	//Defining move constructor and using move semantics doesn't help.
 	//using a smart pointer makes things more complicated
-	QosConnection *qosServers;
-	uint32_t qosServerCount;
-	if (!apiConnection.GetQosServerNames(qosServers, qosServerCount))
+	QosConnection *qosServers = nullptr;
+	uint32_t qosServerCount = 0;
+	if (!apiConnection.GetQosServer(qosServers, qosServerCount))
 	{
 		return EXIT_FAILURE;
 	}

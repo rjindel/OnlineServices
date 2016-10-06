@@ -1,7 +1,15 @@
+//-------------------------------------------------------------------------
+//
+// File: APIConnection.cpp
+//
+// Wrap call to API server to get QosServers
+//
+//--------------------------------------------------------------------------
+
 #include "..\stdafx.h"
 #include "APIConnection.h"
 
-bool APIConnection::GetQosServerNames(QosConnection*& qosServers, uint32_t& qosServerCount)
+bool APIConnection::GetQosServer(QosConnection*& qosServers, uint32_t& qosServerCount) const
 {
 	if (!Send(static_cast<uint16_t>(APIMessageType::GetServers)))
 	{
@@ -33,13 +41,18 @@ bool APIConnection::GetQosServerNames(QosConnection*& qosServers, uint32_t& qosS
 		serverObjects.via.array.ptr[i].convert(serverData);
 
 		std::string servername = serverData.get<0>();
-		int port = serverData.get<1>();
+		int qosPort = serverData.get<1>();
 
-		if (!qosServers[i].CreateConnection(servername, std::to_string(port), false))
+		if (!qosServers[i].CreateConnection(servername, std::to_string(qosPort), false))
 		{
 			return false;
 		}
-		qosServers[i].SetNonBlockingMode();
+		
+		if (!qosServers[i].SetNonBlockingMode())
+		{
+			printf("Error setting no blocking mode");
+			return false;
+		}
 	}
 	
 	return true;
