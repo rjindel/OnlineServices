@@ -2,38 +2,40 @@
 #include "..\stdafx.h"
 #include "SimpleConnection.h"
 
-class QosConnection;
-
 struct QosPacket
 {
-	char header[2] = { (char)0xff, (char)0xff };
-	uint32_t instanceId;
-	uint32_t packetId;
-	//Timestamp
-	LARGE_INTEGER startTime = { 0 };
+	QosPacket() 
+		: instanceId(0)
+		, packetId(0)
+	{
+		memset(header, 0xff, sizeof(header));
+	}
+	char			header[2];
+	uint32_t		instanceId;
+	uint32_t		packetId;
+	LARGE_INTEGER	startTime = { 0 };
 };
 
 class QosConnection : public SimpleConnection
 {
-	uint32_t	packetsSent;
+	static uint32_t			instanceCounter;
+	uint32_t				instanceId;
 
-	std::vector<uint32_t> packetIds;
+	std::thread				QosThread;
+	std::recursive_mutex	QosMutex;
+	bool					exit;
 
-	LARGE_INTEGER frequency;
-	LARGE_INTEGER accumulator = { 0 };
+	WSAOVERLAPPED			overlapped;
+	LARGE_INTEGER			frequency = { 0 };
+	LARGE_INTEGER			accumulator = { 0 };
 
-	static uint32_t instanceCounter;
-	uint32_t instanceId;
+	std::vector<uint32_t>	packetIds;
+	uint32_t				packetsSent;
 
-	WSAOVERLAPPED overlapped;
+	DWORD					timeOut;
+	static const int		MAX_PAYLOADSIZE = 256;
+	QosPacket				packet;
 
-	DWORD timeOut = 5000;
-	static const int MAX_PAYLOADSIZE = 256;
-	QosPacket packet;
-
-	std::thread QosThread;
-	std::recursive_mutex QosMutex;
-	bool exit;
 
 public:
 	QosConnection();

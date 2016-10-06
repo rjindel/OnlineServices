@@ -11,8 +11,7 @@ enum class APIMessageType : UINT16
 	GetServerResponse = 3,
 };
 
-class APIConnection :
-	public SimpleConnection
+class APIConnection : public SimpleConnection
 {
 public:
 	bool GetQosServerNames(QosConnection*& qosServers, uint32_t& qosServerCount);

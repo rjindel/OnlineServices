@@ -1,13 +1,19 @@
 #include "..\stdafx.h"
 #include "SimpleConnection.h"
 
+SimpleConnection::SimpleConnection() : connectedSocket(INVALID_SOCKET)
+{
+	memset(&addr, 0, sizeof(addr));
+	addr.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
+}
+
 SimpleConnection::~SimpleConnection()
 {
 	closesocket(connectedSocket);
 }
 
 // Pass the port as string, so that getddrinfo can handle the conversion to network byte ordering
-bool SimpleConnection::CreateConnection(std::string url, std::string port, bool tcpip)
+bool SimpleConnection::CreateConnection(const std::string& url, const std::string& port, bool tcpip)
 {
 	if (tcpip)
 	{
@@ -25,7 +31,6 @@ bool SimpleConnection::CreateConnection(std::string url, std::string port, bool 
 	struct addrinfo *resultPtr;
 	auto err = getaddrinfo(url.c_str(), port.c_str(), &addr, &resultPtr);
 	std::shared_ptr<addrinfo> resultWrapper(resultPtr, freeaddrinfo);
-
 	if (err != 0)
 	{
 		PrintError("Error getting address info");
@@ -53,7 +58,23 @@ bool SimpleConnection::CreateConnection(std::string url, std::string port, bool 
 	return true;
 }
 
-bool SimpleConnection::Send(uint16_t msgType, msgpack::sbuffer& buffer)
+//Send a packet of msgType with no payload
+bool SimpleConnection::Send(uint16_t msgType)
+{
+	SimpleHeader authHeader;
+	authHeader.msgType = msgType;
+	authHeader.payloadSize = 0;
+
+	auto err = send(connectedSocket, (char*)&authHeader, sizeof(SimpleHeader), 0);
+	if (err == SOCKET_ERROR)
+	{
+		PrintError("Error sending header: ");
+	}
+
+	return true;
+}
+
+bool SimpleConnection::Send(uint16_t msgType, const msgpack::sbuffer& buffer)
 {
 	SimpleHeader authHeader;
 	authHeader.msgType = msgType;
@@ -76,22 +97,7 @@ bool SimpleConnection::Send(uint16_t msgType, msgpack::sbuffer& buffer)
 	return true;
 }
 
-bool SimpleConnection::Send(uint16_t msgType)
-{
-	SimpleHeader authHeader;
-	authHeader.msgType = msgType;
-	authHeader.payloadSize = 0;
-
-	auto err = send(connectedSocket, (char*)&authHeader, sizeof(SimpleHeader), 0);
-	if (err == SOCKET_ERROR)
-	{
-		PrintError("Error sending header: ");
-	}
-
-	return true;
-}
-
-bool SimpleConnection::Send(uint16_t msgType, const std::vector<char> buffer)
+bool SimpleConnection::Send(uint16_t msgType, const std::vector<char>& buffer)
 {
 	SimpleHeader authHeader;
 	authHeader.msgType = msgType;
@@ -150,13 +156,16 @@ bool SimpleConnection::Receive(uint16_t& msgType, std::vector<char>& buffer)
 	return true;
 }
 
-void SimpleConnection::SetNonBlockingMode()
+bool SimpleConnection::SetNonBlockingMode()
 {
 	u_long mode = 1;
 	if (ioctlsocket(connectedSocket, FIONBIO, &mode))
 	{
 		PrintError("Error setting non blocking mode: %s");
+		return false;
 	}
+
+	return true;
 }
 
 void SimpleConnection::PrintError(const char * msg)

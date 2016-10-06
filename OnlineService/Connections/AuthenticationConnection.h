@@ -9,13 +9,9 @@ enum class AuthMessageType : uint16_t
 	AuthTicketResponse = 2
 };
 
-class AuthenticationConnection :
-	public SimpleConnection
+class AuthenticationConnection : public SimpleConnection
 {
 public:
-	AuthenticationConnection();
-	virtual ~AuthenticationConnection();
-
 	//Get auth ticket from authentication server
 	bool GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char>& authToken);
 };

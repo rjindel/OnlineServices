@@ -5,7 +5,7 @@
 //If the character is outside outside the range [0-9a-fA-F] throw
 char CharToHex(char character)
 {
-	character = tolower(character);
+	character = static_cast<char>( tolower(character) );
 	if (!isalnum(character))
 	{
 		throw "invalid string";

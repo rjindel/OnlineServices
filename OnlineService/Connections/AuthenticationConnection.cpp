@@ -2,15 +2,6 @@
 #include "AuthenticationConnection.h"
 #include "..\Utils.h"
 
-AuthenticationConnection::AuthenticationConnection()
-{
-}
-
-
-AuthenticationConnection::~AuthenticationConnection()
-{
-}
-
 //Get auth ticket from authentication server
 //authsocket is a socket that is already connect to the authentication server
 //clientID and clientSecret are null terminated string in hex form
@@ -19,14 +10,15 @@ bool AuthenticationConnection::GetAuthToken(const char* clientID, const char* cl
 {
 	const int MAX_PAYLOADSIZE = 256;
 	const int UUID_LENGTH_IN_BYTES = 16;
-	
 	BYTE clientUUID[UUID_LENGTH_IN_BYTES];
+
 	constexpr int maxSecretLength = MAX_PAYLOADSIZE - UUID_LENGTH_IN_BYTES;
 	BYTE clientSecretBinary[maxSecretLength];
 	memset(clientSecretBinary, 0, maxSecretLength);
 
 	StringToHex(clientID, &clientUUID[0]);
 	StringToHex(clientSecret, &clientSecretBinary[0]);
+
 	int secretLength = 0;
 	while (secretLength < maxSecretLength && clientSecretBinary[secretLength] != 0 ) secretLength++;
 

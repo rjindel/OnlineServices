@@ -8,6 +8,7 @@ uint32_t QosConnection::instanceCounter = 0;
 QosConnection::QosConnection() : instanceId(instanceCounter++) 
 	, exit(false)
 	, packetsSent(0)
+	, timeOut(5000)
 {
 }
 
@@ -62,39 +63,40 @@ void QosConnection::Measure()
 		WSAResetEvent(overlapped.hEvent);
 
 		{
-			std::lock_guard<>(QosMutex);
+			std::lock_guard<std::recursive_mutex> lockguard(QosMutex);
 			packetIds.push_back(packetsSent);
 			packet.packetId = packetsSent++;
 		}
 		QueryPerformanceCounter(&packet.startTime);
 
-		WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &overlapped, 0);
-		auto err = WSAGetLastError();
-		PrintError("Sending packet: ");
+		int err = WSASend(connectedSocket, &wsaBuffer, 1, nullptr, 0, &overlapped, 0);
+		if (err != 0 || err != WSA_IO_PENDING)
+		{
+			PrintError("Sending packet: ");
+		}
 
-		DWORD result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, false);
+		DWORD result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, FALSE);
 
 		WSAResetEvent(overlapped.hEvent);
 
 		if (result != WSA_WAIT_TIMEOUT)
 		{
 			do {
-				WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &overlapped, nullptr);
-				err = WSAGetLastError();
+				err = WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &overlapped, nullptr);
 			} while (err == WSA_IO_PENDING);
-			//PrintError("Receiving packet: ");
 
-			result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, true);
+			result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, TRUE);
 			QueryPerformanceCounter(&endTime);
 
 			if (result == 0)
 			{
 				if (packet.header[0] != (char)0xff && packet.header[1] != (char)0xff)
 				{
-					packet.header[0] = packet.header[1] = (char)0xff;
+					memset(packet.header, 0xff, sizeof(packet.header));
 					printf("Error bad packet received\n");
 					continue;
 				}
+
 				if (packet.instanceId != instanceId)
 				{
 					packet.instanceId = instanceId;
@@ -102,7 +104,7 @@ void QosConnection::Measure()
 					continue;
 				}
 
-				std::lock_guard<>(QosMutex);
+				std::lock_guard<std::recursive_mutex> lockguard(QosMutex);
 				auto iter = std::find(packetIds.begin(), packetIds.end(), packet.packetId);
 				if (iter != packetIds.end())
 				{
@@ -116,20 +118,22 @@ void QosConnection::Measure()
 
 uint32_t QosConnection::GetPacketsLost() 
 { 
-	std::lock_guard<>(QosMutex);
+	std::lock_guard<std::recursive_mutex> lockguard(QosMutex);
 	uint32_t packetsLost = packetIds.size();
+
 	return packetsLost;
 }
 
 uint32_t QosConnection::GetAveragePing() 
 {
-	std::lock_guard<>(QosMutex);
+	std::lock_guard<std::recursive_mutex> lockguard(QosMutex);
 	uint32_t succesfullySentPackets = packetsSent - GetPacketsLost();
 	if (succesfullySentPackets)
 	{
 		uint32_t averagePing = (uint32_t)(accumulator.QuadPart * 1000 / (frequency.QuadPart * succesfullySentPackets));
 		return averagePing;
 	}
+
 	return 0;
 }
 
@@ -138,11 +142,13 @@ void QosConnection::PrintQosData(QosConnection *qosServers, uint32_t qosServerCo
 	const int commentLines = 2;
 	const int refreshTime = 10;
 	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+
 	while (!(GetAsyncKeyState(VK_ESCAPE) & 1))
 	{
 		ClearScreen(consoleHandle, qosServerCount + commentLines);
 		printf("Press Escape to exit\n");
 		printf("IP Address:port \t Packets sent \t packets lost \t Average ping \n");
+
 		for (uint32_t i = 0; i < qosServerCount; i++)
 		{
 			uint32_t packetSent = qosServers[i].GetPacketsSent();
@@ -157,6 +163,7 @@ void QosConnection::PrintQosData(QosConnection *qosServers, uint32_t qosServerCo
 				printf("%s:%i \t\t %i \t\t %i \t\t - \n", qosServers[i].GetAddress().c_str(),  std::stoi(qosServers[i].GetPort()), packetSent, packetLost);
 			}
 		}
+
 		printf("\n\n");
 		Sleep(refreshTime);
 	}
