@@ -16,6 +16,11 @@
 //The returned authToken is a byte array of tokenLength. This is still "message packed", however there is no need to unpack this as it is needs to be 'packed' before sending to the API Server
 bool AuthenticationConnection::GetAuthToken(const char* clientID, const char* clientSecret, std::vector<char>& authToken) const
 {
+	if (!clientID || !clientID)
+	{
+		printf("NULL value passed to GetAuthToken\n");
+		return false;
+	}
 	const int MAX_PAYLOADSIZE = 256;
 	const int UUID_LENGTH_IN_BYTES = 16;
 	BYTE clientUUID[UUID_LENGTH_IN_BYTES] = { 0 };

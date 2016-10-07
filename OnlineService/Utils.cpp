@@ -18,7 +18,7 @@ namespace Utils
 		character = static_cast<char>(tolower(character));
 		if (!isalnum(character))
 		{
-			throw "invalid string";
+			throw "Invalid character passed to CharToHex. Character must be alpha-numeric";
 		}
 
 		char temp = 0;
@@ -30,7 +30,10 @@ namespace Utils
 		{
 			temp = character - 'a' + 10;
 		}
-
+		if (temp < 0 || temp > 15)
+		{
+			throw "Invalid character passed to CharToHex. Character must be in between 0-f";
+		}
 		return temp;
 	}
 
@@ -39,7 +42,7 @@ namespace Utils
 	{
 		if (!str || !hex)
 		{
-			throw "invalid parameters";
+			throw "NULL parameter passed to StringToHex";
 		}
 
 		while (*str != 0 && *str + 1 != 0)// && *hex != 0)

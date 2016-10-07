@@ -147,6 +147,11 @@ uint32_t QosConnection::GetAveragePing()
 
 void QosConnection::PrintQosData(QosConnection *qosServers, uint32_t qosServerCount)
 {
+	if (!qosServers)
+	{
+		printf("NULL value passed to PrintQosData\n");
+		return;
+	}
 	const int commentLines = 2;
 	const int refreshTime = 10;
 	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
