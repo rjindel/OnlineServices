@@ -43,15 +43,29 @@ class QosConnection : public SimpleConnection
 	static const int		MAX_PAYLOADSIZE = 256;
 	QosPacket				packet;
 
-
+	uint32_t				packetsThreshhold;
+	HANDLE					packetsThreshholdEvent;
+	
+	void		Measure();
 public:
 	QosConnection();
 	virtual ~QosConnection();
 
 	void		StartMeasuringQos();
+
+	//Request measuring to stop immediately without blocking
+	void		RequestStopMeasuring() 
+	{
+		exit = true;
+	}
+	//Stop measuring and wait for thread to finish. Blocking call.
 	void		StopMeasuring();
 
-	void		Measure();
+	void		SignalAfterPackets(const uint32_t packetsToWaitFor, HANDLE event)
+	{
+		packetsThreshhold = packetsToWaitFor;
+		packetsThreshholdEvent = event;
+	}
 
 	uint32_t	GetPacketsSent() const { return packetsSent; }
 	uint32_t	GetPacketsLost();

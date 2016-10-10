@@ -17,6 +17,7 @@ QosConnection::QosConnection() : instanceId(instanceCounter++)
 	, exit(false)
 	, packetsSent(0)
 	, timeOut(5000)
+	, packetsThreshhold(0)
 {
 	QueryPerformanceFrequency(&frequency);
 }
@@ -89,9 +90,16 @@ void QosConnection::Measure()
 
 		if (result != WSA_WAIT_TIMEOUT)
 		{
+			int errorCode = 0;
 			do {
 				IOResult = WSARecv(connectedSocket, &wsaBuffer, 1, &recvBytes, &flags, &overlapped, nullptr);
-			} while (IOResult == WSA_IO_PENDING);
+				errorCode = WSAGetLastError();
+			} while (errorCode == WSA_IO_PENDING);
+
+			if (IOResult != 0)
+			{
+				PrintError("Sending packet: ");
+			}
 
 			result = WSAWaitForMultipleEvents(1, &overlapped.hEvent, FALSE, timeOut, TRUE);
 			QueryPerformanceCounter(&endTime);
@@ -118,6 +126,14 @@ void QosConnection::Measure()
 				{
 					packetIds.erase(iter);
 					accumulator.QuadPart += endTime.QuadPart - packet.startTime.QuadPart;
+
+					if (packetsThreshhold && (packetsSent - GetPacketsLost()) >= packetsThreshhold)
+					{
+						if (!SetEvent(packetsThreshholdEvent))
+						{
+							printf("Error failed to set packets received event\n");
+						}
+					}
 				}
 			}
 		}
@@ -128,6 +144,12 @@ uint32_t QosConnection::GetPacketsLost()
 { 
 	std::lock_guard<std::recursive_mutex> lockguard(QosMutex);
 	uint32_t packetsLost = packetIds.size();
+	
+	//If we have any packets sent, ignore the last packet sent, as it's probably in flight
+	if (packetsLost && packetIds.back() == (packetsSent - 1))
+	{
+		--packetsLost;
+	}
 
 	return packetsLost;
 }

@@ -63,6 +63,10 @@ int main()
 
 	//Get servers for Qos measurements
 
+	HANDLE packetReceivedThreshholdEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+	uint32_t packetsToWaitFor = 50;
+	DWORD timeOut = 5000;
+
 	//Can not use std container, as copy constructor is deleted for thread\mutex class
 	//Defining move constructor and using move semantics doesn't help.
 	//using a smart pointer makes things more complicated
@@ -77,16 +81,39 @@ int main()
 	for (uint32_t i = 0; i < qosServerCount; i++)
 	{
 		qosServers[i].StartMeasuringQos();
+		qosServers[i].SignalAfterPackets(packetsToWaitFor, packetReceivedThreshholdEvent);
 	}
 
-	//Output measurements to screen
-	QosConnection::PrintQosData(qosServers, qosServerCount);
+	//Output measurements to screen and wait for user input before exitting.
+	//QosConnection::PrintQosData(qosServers, qosServerCount);
 
-	//Cleanup
+	WaitForSingleObject(packetReceivedThreshholdEvent, timeOut);
+
+	for( uint32_t i = 0; i < qosServerCount; i++)
+	{
+		qosServers[i].RequestStopMeasuring();
+	}
+
+	uint32_t mostPacketsSent = 0;
+	uint32_t qosServerIndex = 0;
+
+	//Cleanup and determine most suitable server
 	for( uint32_t i = 0; i < qosServerCount; i++)
 	{
 		qosServers[i].StopMeasuring();
+		if ((qosServers[i].GetPacketsSent() - qosServers[i].GetPacketsLost()) > mostPacketsSent)
+		{
+			mostPacketsSent = qosServers[i].GetPacketsSent()- qosServers[i].GetPacketsLost();
+			qosServerIndex = i;
+		}
 	}
+
+	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	Utils::ClearScreen(consoleHandle);
+
+	printf("Preferred data centre is %s. With an average latency of %u ms\n", qosServers[qosServerIndex].GetAddress().c_str(), qosServers[qosServerIndex].GetAveragePing());
+
+	system("pause");
 
 	delete[] qosServers;
 
